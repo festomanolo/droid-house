@@ -1,0 +1,46 @@
+# Xcode
+#
+build/
+DerivedData/
+*.moved-aside
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.app
+
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon must end with two \r
+Icon
+
+# Thumbnails & Cache
+DroidHouse/Thumbnails/
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.MOV
+
+# Local configuration
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Swift Package Manager
+.build/
+
+# IDE
+.idea/
+.vscode/
+
+# Build artifacts
+DroidHouse_v1.0.dmg
+release.sh
+build/

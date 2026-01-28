@@ -12,6 +12,9 @@ struct droid_houseApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .toolbarBackground(.clear, for: .windowToolbar)
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unifiedCompact)
     }
 }
