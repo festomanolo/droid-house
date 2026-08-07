@@ -97,14 +97,11 @@ Apple built the **Walled Garden** to keep you trapped into buying iPhones. If yo
 
 ---
 
-## 📦 **Release Versions**
+## 📦 **Latest Release**
 
 | Version | Highlights & Changes | macOS Download | Android Download |
 | :--- | :--- | :---: | :---: |
-| **`v1.3`** *(Latest)* | **iOS Green Bubbles & Double-Tick Delivery**<br />• Official iOS Messages green bubbles (`#34C759`) & double checkmark delivery reports (`✓✓`).<br />• Jetpack Compose redesign: Plus Jakarta Sans font, 100% circular action chips.<br />• macOS Settings color scheme, faint hairline dividers, and fluid glass tap physics. | [Download DMG](https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg) | [Download APK](https://github.com/festomanolo/droid-house/releases/download/v1.3/app-debug.apk) |
-| **`v1.2`** | **AeroCast 60fps Screen Mirroring**<br />• Low-latency screen & audio streaming pipeline.<br />• Wireless ADB auto-discovery & device manager. | [Download DMG](https://github.com/festomanolo/droid-house/releases/download/v1.2/DroidHouse_v1.2.dmg) | [Download APK](https://github.com/festomanolo/droid-house/releases/download/v1.2/app-debug.apk) |
-| **`v1.1`** | **Universal Clipboard & SMS Threads**<br />• 2-way background clipboard synchronization.<br />• Full SMS outbox and message thread browser. | [Download DMG](https://github.com/festomanolo/droid-house/releases/download/v1.1/DroidHouse_v1.1.dmg) | [Download APK](https://github.com/festomanolo/droid-house/releases/download/v1.1/app-debug.apk) |
-| **`v1.0`** | **Initial Launch**<br />• Spatial glass design system, batch file explorer, & storage analytics. | [Download DMG](https://github.com/festomanolo/droid-house/releases/download/v1.0/DroidHouse_v1.0.dmg) | [Download APK](https://github.com/festomanolo/droid-house/releases/download/v1.0/app-debug.apk) |
+| **`v1.3`** *(Latest RC)* | **iOS Green Bubbles, Double-Tick Reports & 6.1MB Release Candidate**<br />• Official iOS Messages green bubbles (`#34C759`) & double checkmark delivery reports (`✓✓`).<br />• Jetpack Compose redesign: Plus Jakarta Sans font, 100% circular action chips.<br />• macOS Settings color scheme, faint hairline dividers, and fluid glass tap physics.<br />• Optimized 6.1MB R8 release build with ProGuard security. | [Download DMG (v1.3)](https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg) | [Download APK (v1.3)](https://github.com/festomanolo/droid-house/releases/download/v1.3/app-release.apk) |
 
 ---
 
@@ -121,7 +118,7 @@ brew install --cask android-platform-tools
 1. Enable **USB Debugging** (and Wireless Debugging) under *Developer Options*.
 2. Install the companion APK:
    ```bash
-   adb install -r app-debug.apk
+   adb install -r app-release.apk
    ```
 3. Open **DroidHouse Companion** on your phone to grant runtime SMS & Audio projection permissions.
 
