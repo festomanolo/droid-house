@@ -100,7 +100,7 @@ struct MessagesView: View {
     private var thread: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 5) {
+                VStack(spacing: 6) {
                     ForEach(companionSync.activeMessages) { message in
                         ChatBubble(
                             message: message,
@@ -136,42 +136,44 @@ struct MessagesView: View {
                     // Anchor for "scroll to the very bottom" with generous padding
                     // so the last bubble, timestamp, and delivery ticks are 100% visible.
                     Color.clear
-                        .frame(height: 28)
+                        .frame(height: 36)
                         .id(Self.bottomAnchor)
                 }
                 .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.bottom, 16)
             }
             .animation(Spatial.Motion.bouncy, value: companionSync.activeMessages)
             .onChange(of: companionSync.activeMessages) { _, messages in
                 guard !messages.isEmpty else { return }
-
-                if hasPositionedThread {
-                    // Subsequent traffic animates into place.
-                    withAnimation(Spatial.Motion.fluid) {
-                        proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
-                    }
-                } else {
-                    // First load of a thread should *open* at the newest
-                    // message, with no visible scroll animation.
-                    hasPositionedThread = true
-                    proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(50))
-                        proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
-                    }
-                }
+                scrollToBottom(proxy: proxy, animated: hasPositionedThread)
+                hasPositionedThread = true
             }
             .onChange(of: replyingTo) { _, _ in
-                withAnimation(Spatial.Motion.fluid) {
-                    proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
-                }
+                scrollToBottom(proxy: proxy, animated: true)
             }
             .onChange(of: isInputFocused) { _, _ in
+                scrollToBottom(proxy: proxy, animated: true)
+            }
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = false) {
+        let performScroll = {
+            if animated {
                 withAnimation(Spatial.Motion.fluid) {
                     proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
                 }
+            } else {
+                proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
             }
+        }
+
+        performScroll()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            performScroll()
+            try? await Task.sleep(for: .milliseconds(150))
+            performScroll()
         }
     }
 

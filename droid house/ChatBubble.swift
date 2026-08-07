@@ -254,7 +254,14 @@ struct ChatBubble: View {
     }
 
     private var bubbleContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let bubbleShape = UnevenRoundedRectangle(
+            cornerRadii: message.isOutgoing
+                ? RectangleCornerRadii(topLeading: 18, bottomLeading: 18, bottomTrailing: 4, topTrailing: 18)
+                : RectangleCornerRadii(topLeading: 18, bottomLeading: 4, bottomTrailing: 18, topTrailing: 18),
+            style: .continuous
+        )
+
+        return VStack(alignment: .leading, spacing: 6) {
             if let tag = replyTag {
                 quotePreview(tag)
             }
@@ -275,7 +282,7 @@ struct ChatBubble: View {
             }
             .scaleEffect(showsActions ? 1.014 : 1.0)
             .animation(Spatial.Motion.crisp, value: showsActions)
-            .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .contentShape(bubbleShape)
             .onTapGesture {
                 withAnimation(Spatial.Motion.bouncy) { showsTimestamp.toggle() }
                 reactionTrigger += 1
@@ -350,7 +357,12 @@ struct ChatBubble: View {
 
     @ViewBuilder
     private var bubbleBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 17, style: .continuous)
+        let shape = UnevenRoundedRectangle(
+            cornerRadii: message.isOutgoing
+                ? RectangleCornerRadii(topLeading: 18, bottomLeading: 18, bottomTrailing: 4, topTrailing: 18)
+                : RectangleCornerRadii(topLeading: 18, bottomLeading: 4, bottomTrailing: 18, topTrailing: 18),
+            style: .continuous
+        )
 
         if message.isOutgoing {
             shape
