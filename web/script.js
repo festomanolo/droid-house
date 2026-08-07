@@ -13,10 +13,10 @@ function initSplashScreen() {
     const splash = document.getElementById('splashScreen');
     if (!splash) return;
 
-    // Fade out splash screen after 2.4 seconds
+    // Fade out splash screen after 3.8 seconds to allow full sequential animation
     setTimeout(() => {
         splash.classList.add('fade-out');
-    }, 2400);
+    }, 3800);
 
     // Dismiss on scroll or keydown as well
     const dismissSplash = () => {

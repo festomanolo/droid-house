@@ -80,17 +80,17 @@ body {
 }
 
 .splash-img {
-    width: 110px;
+    width: clamp(180px, 22vw, 260px);
     height: auto;
-    filter: drop-shadow(0 0 35px rgba(56, 189, 248, 0.7));
-    transform: scale(0.85) translateX(-15px);
+    filter: drop-shadow(0 0 55px rgba(56, 189, 248, 0.85));
+    transform: scale(0.7) translateX(-20px);
     opacity: 0;
-    animation: splashImageEnter 0.9s var(--ease-apple) 0.1s forwards;
+    animation: splashImageEnter 1.1s var(--ease-apple) 0.1s forwards;
 }
 
 @keyframes splashImageEnter {
-    0% { transform: scale(0.8) translateX(-25px); opacity: 0; }
-    100% { transform: scale(1) translateX(0); opacity: 1; }
+    0% { transform: scale(0.7) translateX(-30px); opacity: 0; filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.2)); }
+    100% { transform: scale(1) translateX(0); opacity: 1; filter: drop-shadow(0 0 60px rgba(56, 189, 248, 0.9)); }
 }
 
 .splash-text {
@@ -98,31 +98,31 @@ body {
     flex-direction: column;
     align-items: flex-start;
     opacity: 0;
-    transform: translateX(-35px);
-    animation: splashTextSlideRight 1s var(--ease-apple) 0.35s forwards;
+    transform: translateX(-40px);
+    animation: splashTextSlideRight 1.2s var(--ease-apple) 1.5s forwards;
 }
 
 @keyframes splashTextSlideRight {
-    0% { opacity: 0; transform: translateX(-35px); }
+    0% { opacity: 0; transform: translateX(-40px); }
     100% { opacity: 1; transform: translateX(0); }
 }
 
 .splash-title {
     font-family: var(--font-heading);
-    font-size: clamp(2.8rem, 5vw, 4.2rem);
+    font-size: clamp(3rem, 5.5vw, 4.6rem);
     font-weight: 900;
     letter-spacing: -0.03em;
     color: #ffffff;
     line-height: 1;
-    text-shadow: 0 0 40px rgba(56, 189, 248, 0.6);
+    text-shadow: 0 0 50px rgba(56, 189, 248, 0.7);
 }
 
 .splash-subtitle {
     font-family: var(--font-heading);
-    font-size: clamp(1.1rem, 2vw, 1.6rem);
+    font-size: clamp(1.2rem, 2.2vw, 1.8rem);
     font-weight: 600;
     color: var(--accent-blue);
-    margin-top: 6px;
+    margin-top: 8px;
     letter-spacing: -0.01em;
 }
 
