@@ -50,10 +50,10 @@ val LabelSecondary = Color(0xFF98989D)
 val LabelTertiary = Color(0xFF636366)
 
 val PlusJakartaSans = FontFamily(
-    Font(R.font.plus_jakarta_sans_regular, FontWeight.Normal),
-    Font(R.font.plus_jakarta_sans_medium, FontWeight.Medium),
-    Font(R.font.plus_jakarta_sans_semibold, FontWeight.SemiBold),
-    Font(R.font.plus_jakarta_sans_bold, FontWeight.Bold)
+    Font(R.font.plus_jakarta_sans, FontWeight.Normal),
+    Font(R.font.plus_jakarta_sans, FontWeight.Medium),
+    Font(R.font.plus_jakarta_sans, FontWeight.SemiBold),
+    Font(R.font.plus_jakarta_sans, FontWeight.Bold)
 )
 
 private val DarkColors = darkColorScheme(
