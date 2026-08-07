@@ -1,16 +1,39 @@
-// DROIDHOUSE - Next-Level Promo Webpage Interactive Controller
+// DROIDHOUSE - Next-Level Promo Webpage Controller
 
 document.addEventListener('DOMContentLoaded', () => {
+    initSplashScreen();
     initNavbarScroll();
-    initIMacPerspectiveScroll();
+    initAppleImacScrollZoom();
     initScrollReveal();
     initShowcaseTabs();
-    initTiltEffects();
 });
+
+// Splash Screen Timer & Dismissal
+function initSplashScreen() {
+    const splash = document.getElementById('splashScreen');
+    if (!splash) return;
+
+    // Fade out splash screen after 2.4 seconds
+    setTimeout(() => {
+        splash.classList.add('fade-out');
+    }, 2400);
+
+    // Dismiss on scroll or keydown as well
+    const dismissSplash = () => {
+        if (!splash.classList.contains('fade-out')) {
+            splash.classList.add('fade-out');
+        }
+    };
+
+    window.addEventListener('scroll', dismissSplash, { once: true });
+    window.addEventListener('keydown', dismissSplash, { once: true });
+}
 
 // Navbar Scrolled State
 function initNavbarScroll() {
     const navbar = document.querySelector('.navbar');
+    if (!navbar) return;
+
     window.addEventListener('scroll', () => {
         if (window.scrollY > 40) {
             navbar.classList.add('scrolled');
@@ -20,8 +43,8 @@ function initNavbarScroll() {
     });
 }
 
-// Apple iMac 3D Scroll Perspective Animation
-function initIMacPerspectiveScroll() {
+// Apple.com/imac Scroll-Driven Zoom-In Animation
+function initAppleImacScrollZoom() {
     const imacWrapper = document.getElementById('imacMockup');
     if (!imacWrapper) return;
 
@@ -32,21 +55,20 @@ function initIMacPerspectiveScroll() {
         const rect = stage.getBoundingClientRect();
         const windowHeight = window.innerHeight;
 
-        // Progress from top of viewport to center
+        // Calculate scroll progress relative to viewport
         if (rect.top <= windowHeight && rect.bottom >= 0) {
             const scrollProgress = Math.min(1, Math.max(0, (windowHeight - rect.top) / (windowHeight + rect.height)));
             
-            // Start tilted back 20deg, straighten to 0deg and scale up slightly on scroll
-            const rotateX = 20 - (scrollProgress * 22); // 20deg -> -2deg
-            const scale = 0.90 + (scrollProgress * 0.12); // 0.90 -> 1.02
-            const translateY = (1 - scrollProgress) * 40; // 40px -> 0px
+            // Apple iMac scroll zoom: scale smoothly from 0.88 to 1.05 as you scroll down
+            const scale = 0.88 + (scrollProgress * 0.17); // 0.88 -> 1.05
+            const translateY = (1 - scrollProgress) * 30; // 30px -> 0px
 
-            imacWrapper.style.transform = `rotateX(${Math.max(0, rotateX)}deg) scale(${Math.min(1.02, scale)}) translateY(${translateY}px)`;
+            imacWrapper.style.transform = `scale(${Math.min(1.06, scale)}) translateY(${translateY}px)`;
         }
     });
 }
 
-// Scroll Reveal Intersection Observer
+// Scroll Reveal Observer (Zoom-In Reveal)
 function initScrollReveal() {
     const reveals = document.querySelectorAll('.reveal');
     
@@ -57,8 +79,8 @@ function initScrollReveal() {
             }
         });
     }, {
-        threshold: 0.15,
-        rootMargin: '0px 0px -50px 0px'
+        threshold: 0.12,
+        rootMargin: '0px 0px -40px 0px'
     });
 
     reveals.forEach((el) => observer.observe(el));
@@ -73,46 +95,17 @@ function initShowcaseTabs() {
         tab.addEventListener('click', () => {
             const targetId = tab.getAttribute('data-target');
 
-            // Toggle Tab Classes
+            // Toggle Tab Active State
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
 
-            // Toggle Image Classes
+            // Toggle Image Active State with scale transition
             images.forEach(img => {
                 img.classList.remove('active');
                 if (img.id === targetId) {
                     img.classList.add('active');
                 }
             });
-        });
-    });
-}
-
-// Subtle 3D Card Hover Tilt FX
-function initTiltEffects() {
-    const cards = document.querySelectorAll('.feature-card, .imac-mockup-wrapper');
-
-    cards.forEach(card => {
-        card.addEventListener('mousemove', (e) => {
-            const rect = card.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-
-            const rotateX = (y - centerY) / 25;
-            const rotateY = (centerX - x) / 25;
-
-            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
-        });
-
-        card.addEventListener('mouseleave', () => {
-            if (card.classList.contains('imac-mockup-wrapper')) {
-                card.style.transform = 'rotateX(0deg) scale(1)';
-            } else {
-                card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
-            }
         });
     });
 }
