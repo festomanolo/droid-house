@@ -16,7 +16,9 @@
 
   <br />
 
-  <img src="droid%20house/Assets.xcassets/droid-bg.imageset/droid_bg.png" width="160" alt="DroidHouse Icon" style="border-radius: 28px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);" />
+  <a href="assets/droid.ico">
+    <img src="assets/droid-bg.png" width="160" alt="DroidHouse Icon" style="border-radius: 28px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);" />
+  </a>
 
 </div>
 
