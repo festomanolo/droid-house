@@ -409,6 +409,18 @@ final class SmartReplyEngine: ObservableObject {
     private func contextualExtras(for context: Context) -> [Suggestion] {
         var out: [Suggestion] = []
 
+        // Context-aware expressions
+        out.append(Suggestion(
+            text: "Hongera sana Aiseeee!!",
+            kind: .courtesy,
+            score: 0.98
+        ))
+        out.append(Suggestion(
+            text: "Una maisha aiseee aaaah!",
+            kind: .courtesy,
+            score: 0.97
+        ))
+
         // Apologise for a genuinely late reply — but only once the delay is
         // long enough that it would actually read as late.
         if context.waitingMinutes > 180 {
