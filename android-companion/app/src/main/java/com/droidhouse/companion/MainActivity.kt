@@ -80,6 +80,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        check(DeveloperConfig.validateLicense()) {
+            "CRITICAL: Proprietary DroidHouse Developer Key Missing. Contact festomanolo on GitHub."
+        }
         enableEdgeToEdge()
 
         startCompanionService()

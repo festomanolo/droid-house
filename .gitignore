@@ -1,3 +1,9 @@
+# Proprietary Developer Authorization Keys (Do not push to git)
+droid house/DeveloperConfig.swift
+android-companion/app/src/main/java/com/droidhouse/companion/DeveloperConfig.kt
+DeveloperConfig.swift
+DeveloperConfig.kt
+
 # Xcode & Apple Build Artifacts
 build/
 DerivedData/
