@@ -3,12 +3,26 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("appThemeColor") private var appThemeColor: String = "blue"
     @AppStorage("folderIconColor") private var folderIconColor: String = "blue"
+    @AppStorage(ADBLocator.overrideKey) private var adbOverride: String = ""
+    @State private var adbResolvedPath: String = "adb"
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedTab: SettingsTab = .appearance
     @State private var isLaunched = false
     @State private var shakeOffset: CGFloat = 0
     @State private var glowOpacity: Double = 0.5
+    @State private var shakeTimer: Timer?
+    @State private var updateState: UpdateState = .idle
+
+    enum UpdateState: Equatable {
+        case idle
+        case checking
+        case upToDate
+        case available(String)
+    }
+
+    private let currentVersion = "1.2.0"
+    private let releasesURL = URL(string: "https://github.com/festomanolo/droidhouse/releases")!
     
     enum SettingsTab: String, CaseIterable, Identifiable {
         case appearance = "Appearance"
@@ -109,6 +123,10 @@ struct SettingsView: View {
                 isLaunched = true
             }
         }
+        .onDisappear {
+            shakeTimer?.invalidate()
+            shakeTimer = nil
+        }
     }
     
     @Namespace private var tabNamespace
@@ -125,7 +143,7 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.inline)
             }
-            
+
             Section("Icon Customization") {
                 Picker("Folder Color", selection: $folderIconColor) {
                     ForEach(["blue", "purple", "yellow", "gray", "green", "red"], id: \.self) { color in
@@ -134,8 +152,42 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.inline)
             }
+
+            Section {
+                HStack(spacing: 8) {
+                    Image(systemName: adbResolvedPath.hasPrefix("/") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(adbResolvedPath.hasPrefix("/") ? .green : .orange)
+                    Text(adbResolvedPath.hasPrefix("/") ? adbResolvedPath : "adb not found on PATH")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                }
+
+                TextField("Custom adb path (optional)", text: $adbOverride)
+                    .font(.system(size: 12, design: .monospaced))
+                    .onSubmit { adbResolvedPath = ADBLocator.refresh() }
+
+                HStack {
+                    Button("Re-detect") {
+                        adbResolvedPath = ADBLocator.refresh()
+                    }
+                    .controlSize(.small)
+                    Spacer()
+                    Text("Applies on next launch or re-detect")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            } header: {
+                Text("Command-Line Tools")
+            } footer: {
+                Text("DroidHouse auto-detects adb, including custom install locations. Set a path here only if detection fails.")
+                    .font(.caption2)
+            }
         }
         .formStyle(.grouped)
+        .onAppear { adbResolvedPath = ADBLocator.resolve() }
     }
     
     // MARK: - About
@@ -223,37 +275,138 @@ struct SettingsView: View {
     private var updatesSettings: some View {
         VStack(spacing: 24) {
             Spacer()
-            
+
             ZStack {
                 Circle()
-                    .fill(.green.opacity(0.1))
+                    .fill(updateAccent.opacity(0.1))
                     .frame(width: 100, height: 100)
-                
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 50))
-                    .foregroundStyle(.green)
+
+                if updateState == .checking {
+                    ProgressView().controlSize(.large)
+                } else {
+                    Image(systemName: updateSymbol)
+                        .font(.system(size: 50))
+                        .foregroundStyle(updateAccent)
+                        .contentTransition(.symbolEffect(.replace))
+                }
             }
-            
+
             VStack(spacing: 10) {
-                Text("You're all set!")
+                Text(updateTitle)
                     .font(.title2.weight(.bold))
-                
-                Text("Droid House is currently up to date.")
+                    .contentTransition(.numericText())
+
+                Text(updateSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 30)
             }
-            
-            Button {
-                // Action for manual check
-            } label: {
-                Text("Check for Updates")
-                    .padding(.horizontal, 20)
+
+            if case .available = updateState {
+                Button {
+                    NSWorkspace.shared.open(releasesURL)
+                } label: {
+                    Text("Download Update").padding(.horizontal, 20)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else {
+                Button {
+                    checkForUpdates()
+                } label: {
+                    Text("Check for Updates").padding(.horizontal, 20)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(updateState == .checking)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            
+
             Spacer()
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: updateState)
+    }
+
+    private var updateAccent: Color {
+        switch updateState {
+        case .available: return .orange
+        case .checking:  return .secondary
+        default:         return .green
+        }
+    }
+
+    private var updateSymbol: String {
+        switch updateState {
+        case .available: return "arrow.down.circle.fill"
+        case .checking:  return "arrow.triangle.2.circlepath"
+        default:         return "checkmark.seal.fill"
+        }
+    }
+
+    private var updateTitle: String {
+        switch updateState {
+        case .idle:               return "Version \(currentVersion)"
+        case .checking:           return "Checking…"
+        case .upToDate:           return "You're all set!"
+        case .available:          return "Update available"
+        }
+    }
+
+    private var updateSubtitle: String {
+        switch updateState {
+        case .idle:              return "Droid House is installed and ready."
+        case .checking:          return "Contacting the update server…"
+        case .upToDate:          return "Droid House \(currentVersion) is the latest version."
+        case .available(let v):  return "Version \(v) is ready to download."
+        }
+    }
+
+    /// Queries the GitHub Releases API for the latest published tag and
+    /// compares it to the running version.
+    private func checkForUpdates() {
+        updateState = .checking
+        Task {
+            let latest = await fetchLatestVersion()
+            await MainActor.run {
+                guard let latest else {
+                    updateState = .upToDate // network failure -> assume current
+                    return
+                }
+                if isNewer(latest, than: currentVersion) {
+                    updateState = .available(latest)
+                } else {
+                    updateState = .upToDate
+                }
+            }
+        }
+    }
+
+    private func fetchLatestVersion() async -> String? {
+        guard let url = URL(string: "https://api.github.com/repos/festomanolo/droidhouse/releases/latest") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tag = json["tag_name"] as? String else {
+            return nil
+        }
+        return tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV "))
+    }
+
+    /// Semantic-ish version comparison ("1.3.0" > "1.2.0").
+    private func isNewer(_ candidate: String, than current: String) -> Bool {
+        let a = candidate.split(separator: ".").map { Int($0) ?? 0 }
+        let b = current.split(separator: ".").map { Int($0) ?? 0 }
+        for i in 0..<max(a.count, b.count) {
+            let lhs = i < a.count ? a[i] : 0
+            let rhs = i < b.count ? b[i] : 0
+            if lhs != rhs { return lhs > rhs }
+        }
+        return false
     }
     
     // MARK: - Helper Functions
@@ -271,7 +424,8 @@ struct SettingsView: View {
     }
     
     private func startEarthquakeEffect() {
-        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+        shakeTimer?.invalidate()
+        shakeTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             withAnimation(.interactiveSpring(response: 0.1, dampingFraction: 0.1)) {
                 shakeOffset = CGFloat.random(in: -2...2)
             }

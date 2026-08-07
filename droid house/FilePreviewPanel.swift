@@ -110,7 +110,10 @@ struct FilePreviewPanel: View {
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
                 
-                VideoPlayer(player: AVPlayer(url: url))
+                // AppKit AVPlayerView instead of SwiftUI's VideoPlayer, which
+                // aborts on generic-metadata instantiation on some Intel/macOS
+                // configurations (_AVKit_SwiftUI crash).
+                AVPlayerViewRepresentable(url: url)
                     .frame(height: 180)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
@@ -216,6 +219,36 @@ struct FilePreviewPanel: View {
     }
 }
 
+// MARK: - AppKit Video Player
+
+/// Wraps AppKit's `AVPlayerView`. We deliberately avoid SwiftUI's `VideoPlayer`
+/// because instantiating its generic metadata (`_AVKit_SwiftUI`) aborts at
+/// runtime on some Intel / macOS 26 configurations.
+struct AVPlayerViewRepresentable: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.controlsStyle = .inline
+        view.videoGravity = .resizeAspect
+        view.player = AVPlayer(url: url)
+        return view
+    }
+
+    func updateNSView(_ nsView: AVPlayerView, context: Context) {
+        let currentURL = (nsView.player?.currentItem?.asset as? AVURLAsset)?.url
+        if currentURL != url {
+            nsView.player?.pause()
+            nsView.player = AVPlayer(url: url)
+        }
+    }
+
+    static func dismantleNSView(_ nsView: AVPlayerView, coordinator: ()) {
+        nsView.player?.pause()
+        nsView.player = nil
+    }
+}
+
 // MARK: - Info Row
 
 struct InfoRow: View {
@@ -246,7 +279,7 @@ struct AudioPlayerView: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            // Waveform placeholder
+            // Decorative waveform header for the functional audio transport below.
             RoundedRectangle(cornerRadius: 6)
                 .fill(.quaternary)
                 .frame(height: 40)

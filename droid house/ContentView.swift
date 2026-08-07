@@ -1,37 +1,98 @@
-//
-//  ContentView.swift
-//  droid house
-//
-//  Created by festomanolo on 28/01/2026.
-//
-
 import SwiftUI
 import QuickLook
 
-struct ContentView: View {
-    enum ExplorerTab: String, CaseIterable, Identifiable {
-        case device
-        case transfers
+struct MacOSSplashScreenView: View {
+    @Binding var isPresented: Bool
+    @State private var logoScale: CGFloat = 0.75
+    @State private var logoOpacity: Double = 0.0
+    @State private var textOffset: CGFloat = 0
+    @State private var textOpacity: Double = 0.0
+    @State private var subtitleOpacity: Double = 0.0
 
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .device: return "Device"
-            case .transfers: return "Transfers"
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.94)
+                .ignoresSafeArea()
+            
+            RadialGradient(
+                colors: [Color.blue.opacity(0.3), Color.black.opacity(0.9)],
+                center: .center,
+                startRadius: 30,
+                endRadius: 500
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                ZStack {
+                    // Animated Text shifting from behind logo
+                    VStack(spacing: 6) {
+                        Text("DROIDHOUSE")
+                            .font(.system(size: 38, weight: .black, design: .rounded))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.white, Color(red: 0.2, green: 0.6, blue: 1.0)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .shadow(color: .blue.opacity(0.6), radius: 15, x: 0, y: 4)
+
+                        Text("Wireless Desktop Management & Android Companion")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .opacity(subtitleOpacity)
+                    }
+                    .offset(y: textOffset)
+                    .opacity(textOpacity)
+                    .zIndex(1)
+
+                    // Logo on top layer
+                    Image("droid-bg")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 140, height: 140)
+                        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                        )
+                        .shadow(color: .blue.opacity(0.5), radius: 25, x: 0, y: 10)
+                        .scaleEffect(logoScale)
+                        .opacity(logoOpacity)
+                        .zIndex(2)
+                }
             }
         }
-        var systemImage: String {
-            switch self {
-            case .device: return "iphone.gen2"
-            case .transfers: return "arrow.up.arrow.down.circle"
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.6)) {
+                logoScale = 1.0
+                logoOpacity = 1.0
+            }
+            
+            withAnimation(.spring(response: 0.85, dampingFraction: 0.72).delay(0.3)) {
+                textOffset = 115
+                textOpacity = 1.0
+            }
+            
+            withAnimation(.easeIn(duration: 0.5).delay(0.7)) {
+                subtitleOpacity = 1.0
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    isPresented = false
+                }
             }
         }
     }
+}
 
+struct ContentView: View {
     @StateObject private var adbService = ADBService()
+    @StateObject private var companionSync = CompanionSync.shared
     @ObservedObject var transferManager = TransferManager.shared
     
-    @State private var selectedTab: ExplorerTab = .device
+    @State private var selectedSection: NavigationSection = .device
     @State private var layoutMode: MainExplorerView.LayoutMode = .icon
     @State private var searchText: String = ""
     @State private var previewURL: URL?
@@ -39,11 +100,19 @@ struct ContentView: View {
     @State private var uploadStatusText = ""
     @State private var selectedDevice: ADBDevice?
     @State private var selectedFile: RemoteFile?
+    @State private var selectedContact: Contact?
+    
+    @State private var showSplash = true
     @State private var showWirelessSheet = false
     @State private var wirelessIP = ""
     @State private var detectedIP: String?
     @State private var showInspector = true
-    
+    @State private var showTimestampTransfer = false
+    @State private var showOnboarding = false
+    @State private var wirelessError: String?
+    @State private var isConnecting = false
+
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @AppStorage("appThemeColor") private var appThemeColor: String = "blue"
     
     private func colorFromName(_ name: String) -> Color {
@@ -60,25 +129,87 @@ struct ContentView: View {
     }
 
     var body: some View {
-        explorerContent
-            .quickLookPreview($previewURL)
-            .onAppear {
-                Task {
-                    await adbService.detectDevices()
+        ZStack {
+            explorerContent
+
+            if showOnboarding && !showSplash {
+                Color.clear
+                    .ignoresSafeArea()
+                    .overlay {
+                        OnboardingView(adbService: adbService, isPresented: $showOnboarding)
+                    }
+                    .zIndex(999)
+            }
+
+            if showSplash {
+                MacOSSplashScreenView(isPresented: $showSplash)
+                    .transition(.opacity)
+                    .zIndex(1000)
+            }
+        }
+        .frame(minWidth: 960, minHeight: 600)
+        .onAppear {
+            if !hasCompletedOnboarding {
+                showOnboarding = true
+            }
+            Task {
+                await adbService.detectDevices()
+                if selectedDevice == nil { selectedDevice = adbService.selectedDevice }
+                if let firstDevice = adbService.connectedDevices.first {
+                    await companionSync.setupPortForwarding(serial: firstDevice.id, adbPath: adbService.adbPath)
                 }
             }
-            .sheet(isPresented: $showWirelessSheet) {
-                wirelessConnectionSheet
+        }
+        .onChange(of: showOnboarding) { _, newValue in
+            if !newValue { hasCompletedOnboarding = true }
+        }
+        // ADBService auto-selects a device, but the sidebar gates AeroCast and
+        // the Quick Access rows on this local binding. Without mirroring, those
+        // stayed greyed out until the user happened to click the device card.
+        .onChange(of: adbService.selectedDevice) { _, device in
+            if selectedDevice?.id != device?.id { selectedDevice = device }
+        }
+        .onChange(of: adbService.connectedDevices) { _, newValue in
+            if !newValue.isEmpty && showOnboarding {
+                withAnimation(.spring(response: 0.3)) {
+                    showOnboarding = false
+                }
             }
-            .tint(colorFromName(appThemeColor))
+            if let firstDevice = newValue.first {
+                Task {
+                    await companionSync.setupPortForwarding(serial: firstDevice.id, adbPath: adbService.adbPath)
+                }
+            }
+        }
+        .sheet(isPresented: $showWirelessSheet) {
+            wirelessConnectionSheet
+        }
+        .sheet(isPresented: $showTimestampTransfer) {
+            TimestampTransferView(adbService: adbService)
+        }
+        .tint(colorFromName(appThemeColor))
+    }
+
+    /// AeroCast, Roster and Transfers render edge-to-edge, so the inspector is
+    /// suppressed for them regardless of the user's toggle — which is restored
+    /// intact the moment they navigate back to a pane that uses it.
+    private var inspectorPresented: Binding<Bool> {
+        Binding(
+            get: { showInspector && selectedSection.usesInspector },
+            set: { showInspector = $0 }
+        )
     }
 
     private var explorerContent: some View {
         NavigationSplitView {
-            SidebarView(adbService: adbService, selectedDevice: $selectedDevice)
+            SidebarView(
+                adbService: adbService,
+                selectedDevice: $selectedDevice,
+                selectedSection: $selectedSection
+            )
         } detail: {
             Group {
-                switch selectedTab {
+                switch selectedSection {
                 case .device:
                     MainExplorerView(
                         adbService: adbService,
@@ -89,182 +220,187 @@ struct ContentView: View {
                         uploadStatusText: $uploadStatusText,
                         selectedFile: $selectedFile
                     )
+                case .messages:
+                    MessagesView(selectedContact: selectedContact)
+                case .aeroCast:
+                    AeroCastView(adbService: adbService)
+                case .roster:
+                    RosterView(adbService: adbService)
+                case .clipboard:
+                    ClipboardSyncView()
+                case .screenshots:
+                    ScreenshotGalleryView(adbService: adbService)
                 case .transfers:
                     TransfersView()
                 }
             }
         }
-        .inspector(isPresented: $showInspector) {
-            FilePreviewPanel(file: selectedFile, adbService: adbService)
-                .inspectorColumnWidth(min: 250, ideal: 300, max: 400)
-        }
-        .navigationSplitViewStyle(.balanced)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 24) { // Increased spacing between groups
-                    // 1. Global Refresh (Left)
-                    Button {
-                        Task {
-                            await adbService.detectDevices()
-                            if let device = adbService.selectedDevice {
-                                await adbService.fetchStorageInfo(device: device)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.clockwise.circle.fill")
-                            .font(.system(size: 24)) // Increased size
-                            .symbolRenderingMode(.hierarchical)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Refresh All")
-                    
-                    // 2. Tabs (Center - Restored Style)
-                    HStack(spacing: 6) {
-                        ForEach(ExplorerTab.allCases) { tab in
-                            Button {
-                                selectedTab = tab
-                            } label: {
-                                Label(tab.title, systemImage: tab.systemImage)
-                                    .labelStyle(.titleAndIcon)
-                                    .font(.system(size: 13, weight: .medium)) // Slightly larger font
-                                    .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-                                    .padding(.horizontal, 16) // Increased padding
-                                    .padding(.vertical, 8)    // Increased padding
-                                    .background(
-                                        Capsule()
-                                            .fill(selectedTab == tab ? Color.primary.opacity(0.12) : Color.clear)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(4)
-                    .background(Capsule().fill(.ultraThinMaterial))
-                    
-                    Spacer() // Push indicators to the right
-                    
-                    // 3. Status & Storage (Right)
-                    HStack(spacing: 16) {
-                        if !transferManager.activeTransfers.isEmpty {
-                            TransferStatusPill()
-                        }
-                        
-                        Divider().frame(height: 24) // Taller divider
-                        
-                        HStack(spacing: 12) {
-                            ForEach(adbService.storageInfo) { info in
-                                StorageIndicatorView(info: info)
-                            }
-                        }
-                    }
+        .inspector(isPresented: inspectorPresented) {
+            Group {
+                switch selectedSection {
+                case .messages:
+                    ContactsSidebarView(selectedContact: $selectedContact)
+                case .aeroCast, .roster, .transfers:
+                    // These panes own their full canvas; the inspector would
+                    // only steal width from them.
+                    EmptyView()
+                default:
+                    FilePreviewPanel(file: selectedFile, adbService: adbService)
                 }
             }
-
-            ToolbarItemGroup(placement: .navigation) {
-                Picker("View", selection: $layoutMode) {
-                    ForEach(MainExplorerView.LayoutMode.allCases) { mode in
-                        Label(mode.label, systemImage: mode.systemImage)
-                            .symbolRenderingMode(.monochrome)
-                            .tag(mode)
+            .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .searchable(text: $searchText, placement: .toolbar, prompt: "Search")
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Picker("Section", selection: $selectedSection) {
+                    ForEach(NavigationSection.allCases) { section in
+                        Label(section.rawValue, systemImage: section.systemImage).tag(section)
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 140)
+                .labelStyle(.titleAndIcon)
+                .fixedSize()
             }
 
-            ToolbarItem(placement: .automatic) {
-                TextField("Search", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 200)
+            ToolbarItem(placement: .navigation) {
+                if selectedSection == .device {
+                    Picker("View", selection: $layoutMode) {
+                        ForEach(MainExplorerView.LayoutMode.allCases) { mode in
+                            Image(systemName: mode.systemImage)
+                                .help(mode.label)
+                                .tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                }
             }
 
-            ToolbarItem(placement: .automatic) {
+            ToolbarItem(placement: .principal) {
+                TransferStatusPill()
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showTimestampTransfer = true
+                } label: {
+                    Label("Back Up", systemImage: "clock.arrow.trianglehead.2.counterclockwise.rotate.90")
+                        .labelStyle(.titleAndIcon)
+                }
+                .help("Lossless timestamp-preserving backup & restore")
+                .disabled(adbService.selectedDevice == nil)
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
+
+            ToolbarItemGroup(placement: .automatic) {
                 Button {
                     Task {
-                        await adbService.listFiles(path: adbService.currentPath)
+                        await adbService.detectDevices()
+                        if let device = adbService.selectedDevice {
+                            await adbService.fetchStorageInfo(device: device)
+                            await companionSync.setupPortForwarding(serial: device.id, adbPath: adbService.adbPath)
+                        }
                     }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .symbolRenderingMode(.monochrome)
                 }
                 .help("Refresh")
-            }
 
-            ToolbarItem(placement: .automatic) {
                 Button {
                     prepareWirelessConnection()
                 } label: {
                     Image(systemName: "antenna.radiowaves.left.and.right")
-                        .symbolRenderingMode(.monochrome)
                 }
                 .help("Wireless Connect")
-            }
-            
-            ToolbarItem(placement: .automatic) {
+
                 Button {
                     showInspector.toggle()
                 } label: {
                     Image(systemName: "sidebar.right")
-                        .symbolRenderingMode(.monochrome)
                 }
                 .help("Toggle Inspector")
+
+                Button {
+                    showOnboarding = true
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                }
+                .help("Setup Guide")
             }
         }
+        .toolbarTitleDisplayMode(.inline)
     }
 
     private var wirelessConnectionSheet: some View {
         VStack(spacing: 20) {
             Text("Wireless Connection")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Device IP Address")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                
+
                 TextField("192.168.x.x", text: $wirelessIP)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
-                
+                    .disabled(isConnecting)
+
                 if let detected = detectedIP {
                     Button("Use detected: \(detected)") {
                         wirelessIP = detected
                     }
                     .font(.caption)
+                    .disabled(isConnecting)
+                }
+
+                if let error = wirelessError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(width: 220, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            
+
             HStack(spacing: 12) {
                 Button("Cancel") {
                     showWirelessSheet = false
+                    wirelessError = nil
                 }
-                .keyboardShortcut(.cancelAction)
-                
-                Button("Connect") {
+                .disabled(isConnecting)
+
+                Button(isConnecting ? "Connecting…" : "Connect") {
                     Task {
-                        try? await adbService.connectWireless(ip: wirelessIP)
-                        showWirelessSheet = false
+                        isConnecting = true
+                        wirelessError = nil
+                        do {
+                            try await adbService.connectWireless(ip: wirelessIP)
+                            showWirelessSheet = false
+                        } catch {
+                            wirelessError = error.localizedDescription
+                        }
+                        isConnecting = false
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(wirelessIP.isEmpty)
+                .disabled(wirelessIP.isEmpty || isConnecting)
             }
         }
         .padding(24)
-        .frame(width: 300)
+        .frame(width: 280)
     }
 
     private func prepareWirelessConnection() {
+        showWirelessSheet = true
+        wirelessError = nil
         Task {
             detectedIP = await adbService.getDeviceIP()
-            if let ip = detectedIP {
-                wirelessIP = ip
+            if let detected = detectedIP, wirelessIP.isEmpty {
+                wirelessIP = detected
             }
-            showWirelessSheet = true
         }
     }
-}
-
-#Preview {
-    ContentView()
 }

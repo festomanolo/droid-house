@@ -1,4 +1,101 @@
 import Foundation
+import SwiftUI
+
+enum NavigationSection: String, CaseIterable, Identifiable {
+    case device = "Internal Storage"
+    case messages = "Messages"
+    case aeroCast = "AeroCast"
+    case roster = "Smart Sync"
+    case clipboard = "Clipboard Sync"
+    case screenshots = "Screenshots"
+    case transfers = "Transfers"
+
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .device: return "internaldrive.fill"
+        case .messages: return "message.fill"
+        case .aeroCast: return "airplayvideo"
+        case .roster: return "tablecells.fill"
+        case .clipboard: return "doc.on.clipboard.fill"
+        case .screenshots: return "photo.on.rectangle.angled"
+        case .transfers: return "arrow.up.arrow.down.circle"
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .device: return .blue
+        case .messages: return .green
+        case .aeroCast: return .dhAccentViolet
+        case .roster: return .dhAccentMint
+        case .clipboard: return .orange
+        case .screenshots: return .purple
+        case .transfers: return .cyan
+        }
+    }
+
+    /// One-line description used in the sidebar and the section switcher.
+    var summary: String {
+        switch self {
+        case .device: return "Browse the device filesystem"
+        case .messages: return "Read and reply to SMS threads"
+        case .aeroCast: return "Mirror the screen and audio"
+        case .roster: return "Raw, unmerged tabular data"
+        case .clipboard: return "Two-way clipboard bridge"
+        case .screenshots: return "Live screenshot gallery"
+        case .transfers: return "Active and past file transfers"
+        }
+    }
+
+    /// Sections that render their own full-bleed canvas and shouldn't be
+    /// paired with the file inspector.
+    var usesInspector: Bool {
+        switch self {
+        case .aeroCast, .roster, .transfers: return false
+        default: return true
+        }
+    }
+}
+
+struct Contact: Identifiable, Hashable, Codable {
+    let id: String
+    let name: String
+    let phoneNumber: String
+    let avatarUrl: String?
+    var lastMessageSnippet: String
+    var lastMessageTimestamp: Date
+    var unreadCount: Int
+}
+
+struct SMSMessage: Identifiable, Hashable, Codable {
+    let id: String
+    let conversationId: String
+    let sender: String
+    let body: String
+    let timestamp: Date
+    let isOutgoing: Bool
+}
+
+struct ClipboardItem: Identifiable, Hashable, Codable {
+    let id: UUID
+    let text: String
+    let timestamp: Date
+    let source: Source
+    
+    enum Source: String, Codable {
+        case mac = "macOS"
+        case android = "Android"
+    }
+}
+
+struct ScreenshotItem: Identifiable, Hashable {
+    let id: String
+    let remotePath: String
+    let localCacheURL: URL?
+    let timestamp: Date
+}
 
 struct ADBDevice: Identifiable, Hashable {
     let id: String  // Serial number

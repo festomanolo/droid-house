@@ -1,5 +1,4 @@
-# Xcode
-#
+# Xcode & Apple Build Artifacts
 build/
 DerivedData/
 *.moved-aside
@@ -7,40 +6,42 @@ DerivedData/
 *.xccheckout
 *.xcscmblueprint
 *.app
+*.o
+xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
 
-# General
+# General & OS Files
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# Icon must end with two \r
+*.log
+build.log
 Icon
+
+# Android Build & Local Properties
+.gradle/
+.kotlin/
+android-companion/.gradle/
+android-companion/.kotlin/
+android-companion/build/
+android-companion/app/build/
+local.properties
+android-companion/local.properties
 
 # Thumbnails & Cache
 DroidHouse/Thumbnails/
-*.png
-*.jpg
-*.jpeg
-*.mp4
-*.MOV
-
-# Local configuration
 *.mode1v3
 *.mode2v3
 *.perspectivev3
 
-# CocoaPods
+# Package Managers & IDEs
 Pods/
 Podfile.lock
-
-# Swift Package Manager
 .build/
-
-# IDE
 .idea/
 .vscode/
+.claude/
 
-# Build artifacts
-DroidHouse_v1.0.dmg
-release.sh
-build/
+# Release DMGs (Store in GitHub Releases)
+*.dmg

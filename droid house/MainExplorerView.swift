@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import QuickLook
+import UniformTypeIdentifiers
 
 struct MainExplorerView: View {
     enum LayoutMode: String, CaseIterable, Identifiable {
@@ -38,6 +40,9 @@ struct MainExplorerView: View {
     @State private var fileToRename: RemoteFile?
     @State private var renameText = ""
     @State private var draggedFiles: [RemoteFile] = []
+    @State private var quickLookURLs: [URL] = []
+    @State private var showQuickLook = false
+    @State private var keyMonitor: Any?
     
     @AppStorage("folderIconColor") private var folderIconColor: String = "blue"
     @AppStorage("appThemeColor") private var appThemeColor: String = "blue"
@@ -74,6 +79,39 @@ struct MainExplorerView: View {
                 showDeleteConfirm = true
             }
         }
+        .onAppear {
+            // Install a single local key monitor; guard against duplicates when
+            // the view re-appears so we don't stack handlers (and leak them).
+            guard keyMonitor == nil else { return }
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                // Space bar for Quick Look
+                if event.keyCode == 49 && event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
+                    if !selectedFileIDs.isEmpty {
+                        previewSelectedFiles()
+                        return nil
+                    }
+                }
+                // Cmd+C for copy to Mac
+                if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "c" {
+                    if !selectedFileIDs.isEmpty {
+                        copySelectedToMac()
+                        return nil
+                    }
+                }
+                return event
+            }
+        }
+        .onDisappear {
+            if let monitor = keyMonitor {
+                NSEvent.removeMonitor(monitor)
+                keyMonitor = nil
+            }
+        }
+        .onChange(of: adbService.currentFiles) { _, files in
+            // Warm the thumbnail cache ahead of scrolling.
+            ThumbnailManager.shared.prefetchThumbnails(for: files, adbService: adbService)
+        }
+        .quickLookPreview($previewURL)
     }
 
     // MARK: - Breadcrumb Bar
@@ -112,12 +150,21 @@ struct MainExplorerView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.vertical, 8)
             }
             
-            Spacer()
-            
-            HStack(spacing: 12) {
+            Spacer(minLength: 8)
+
+            HStack(spacing: 10) {
+                // Compact storage indicators (moved out of the crowded toolbar)
+                ForEach(adbService.storageInfo) { info in
+                    CompactStorageBadge(info: info)
+                }
+
+                if !adbService.storageInfo.isEmpty {
+                    Divider().frame(height: 18)
+                }
+
                 // Sort Picker
                 Menu {
                     Picker("Sort By", selection: $adbService.sortOrder) {
@@ -128,26 +175,51 @@ struct MainExplorerView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.up.arrow.down")
+                            .font(.system(size: 11))
                         Text(adbService.sortOrder.rawValue)
+                            .font(.system(size: 11))
                     }
-                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 5)
                     .background(Capsule().fill(.quaternary.opacity(0.5)))
                 }
                 .buttonStyle(.plain)
+                .fixedSize()
+                
+                // Bookmark button
+                Button {
+                    let currentPath = adbService.currentPath
+                    let isBookmarked = adbService.bookmarks.contains(currentPath)
+                    if isBookmarked {
+                        adbService.removeBookmark(currentPath)
+                    } else {
+                        adbService.addBookmark(currentPath)
+                    }
+                } label: {
+                    let currentPath = adbService.currentPath
+                    let isBookmarked = adbService.bookmarks.contains(currentPath)
+                    Image(systemName: isBookmarked ? "star.fill" : "star")
+                        .font(.system(size: 13))
+                        .foregroundStyle(isBookmarked ? .orange : .secondary)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .help("Bookmark")
                 
                 // Selection info
                 if !selectedFileIDs.isEmpty {
                     Text("\(selectedFileIDs.count) selected")
-                        .font(.caption)
+                        .font(.system(size: 11))
                         .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.1)))
                 }
             }
-            .padding(.trailing, 16)
+            .padding(.trailing, 12)
         }
+        .frame(height: 44)
         .background(
             VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
                 .opacity(0.6)
@@ -264,7 +336,10 @@ struct MainExplorerView: View {
                                     contextMenu: { contextMenuContent(for: file) },
                                     adbService: adbService
                                 )
-                                .draggable(file.fullPath)
+                                .onDrag {
+                                    let filesToDrag = selectedFileIDs.contains(file.id) ? selectedFiles : [file]
+                                    return createDragProvider(for: filesToDrag)
+                                }
                             }
                         }
                     }
@@ -313,23 +388,20 @@ struct MainExplorerView: View {
                                 contextMenuContent(for: file)
                             }
                         )
-                        .draggable(file.fullPath) {
-                            FileGridCell(
-                                file: file,
-                                isHovering: false,
-                                isSelected: true,
-                                adbService: adbService,
-                                onHover: { _ in },
-                                onOpen: {},
-                                onSelect: { _ in },
-                                contextMenu: { EmptyView() }
-                            )
-                            .frame(width: 100)
-                            .opacity(0.8)
+                        .onDrag {
+                            // Get files to drag (selected or just this one)
+                            let filesToDrag = selectedFileIDs.contains(file.id) ? selectedFiles : [file]
+                            return createDragProvider(for: filesToDrag)
                         }
                         .dropDestination(for: String.self) { paths, _ in
                             guard file.isDirectory else { return false }
                             handleDropOnFolder(paths: paths, destination: file)
+                            return true
+                        }
+                        .dropDestination(for: URL.self) { urls, _ in
+                            // Mac → phone, dropped directly onto a folder.
+                            guard file.isDirectory else { return false }
+                            startUpload(urls, into: file.fullPath)
                             return true
                         }
                     }
@@ -360,7 +432,10 @@ struct MainExplorerView: View {
                 }
             )
             .tag(file.id)
-            .draggable(file.fullPath)
+            .onDrag {
+                let filesToDrag = selectedFileIDs.contains(file.id) ? selectedFiles : [file]
+                return createDragProvider(for: filesToDrag)
+            }
         }
         .listStyle(.plain)
         .onChange(of: selectedFileIDs) { _, newValue in
@@ -373,74 +448,145 @@ struct MainExplorerView: View {
 
     // MARK: - Context Menu
     
+    /// Files a context action should apply to: the whole selection when the
+    /// right-clicked file is part of it, otherwise just the clicked file
+    /// (matching Finder's behaviour).
+    private func targetFiles(for file: RemoteFile) -> [RemoteFile] {
+        selectedFileIDs.contains(file.id) ? selectedFiles : [file]
+    }
+
     @ViewBuilder
     private func contextMenuContent(for file: RemoteFile?) -> some View {
         if let file = file {
-            Button("Open") { handleOpen(file) }
-            
+            let targets = targetFiles(for: file)
+            let count = targets.count
+            let suffix = count > 1 ? " (\(count))" : ""
+
+            Button(file.isDirectory ? "Open" : "Open with Quick Look") { handleOpen(file) }
             if !file.isDirectory {
-                Button("Download") { downloadFile(file) }
+                Button("Quick Look") { previewFile(file) }
             }
-            
+
             Divider()
-            
-            Button("Copy") {
-                let filesToCopy = selectedFileIDs.isEmpty ? [file] : selectedFiles
-                adbService.copyFiles(filesToCopy)
+
+            // Transfer to Mac
+            Button(count > 1 ? "Save \(count) Items to Mac…" : "Save to Mac…") {
+                if count > 1 { copyFilesToMac(targets) } else { downloadFile(file) }
             }
-            
-            Button("Cut") {
-                let filesToCut = selectedFileIDs.isEmpty ? [file] : selectedFiles
-                adbService.cutFiles(filesToCut)
-            }
-            
+            Button("Copy to Clipboard\(suffix)") { copyFilesToMac(targets) }
+
             Divider()
-            
-            Button("Rename") {
+
+            // On-device clipboard
+            Button("Copy\(suffix)") {
+                selectIfNeeded(targets)
+                adbService.copyFiles(targets)
+            }
+            Button("Cut\(suffix)") {
+                selectIfNeeded(targets)
+                adbService.cutFiles(targets)
+            }
+            if !adbService.clipboard.isEmpty {
+                Button("Paste Here (\(adbService.clipboard.count))") {
+                    Task { try? await adbService.paste() }
+                }
+            }
+            Button("Duplicate\(suffix)") {
+                Task { try? await adbService.duplicateFiles(targets) }
+            }
+
+            Divider()
+
+            Button("Rename…") {
                 fileToRename = file
                 renameText = file.name
                 showRenameSheet = true
             }
-            
-            Button("Delete", role: .destructive) {
-                if selectedFileIDs.isEmpty {
-                    selectedFileIDs.insert(file.id)
-                }
-                showDeleteConfirm = true
-            }
-            
-            Divider()
-            
-            Button("Copy Path") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(file.fullPath, forType: .string)
-            }
-        } else {
-            // Background context menu
+            .disabled(count > 1)
+
             Button("New Folder") {
                 newFolderName = ""
                 showNewFolderSheet = true
             }
-            
-            if !adbService.clipboard.isEmpty {
-                Button("Paste (\(adbService.clipboard.count) items)") {
-                    Task {
-                        try? await adbService.paste()
-                    }
-                }
+
+            Button("Copy Path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(targets.map(\.fullPath).joined(separator: "\n"), forType: .string)
             }
-            
+
             Divider()
-            
-            Button("Refresh") {
-                Task {
-                    await adbService.listFiles(path: adbService.currentPath)
+
+            Button("Delete\(suffix)", role: .destructive) {
+                selectedFileIDs = Set(targets.map(\.id))
+                showDeleteConfirm = true
+            }
+        } else {
+            // Empty-space (background) menu
+            Button("New Folder") {
+                newFolderName = ""
+                showNewFolderSheet = true
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+
+            if !adbService.clipboard.isEmpty {
+                Button("Paste (\(adbService.clipboard.count))") {
+                    Task { try? await adbService.paste() }
                 }
+                .keyboardShortcut("v", modifiers: .command)
             }
-            
+
+            Button("Upload from Mac…") { chooseFilesToUpload() }
+
+            Divider()
+
             Button("Select All") {
-                selectedFileIDs = Set(filteredFiles.map { $0.id })
+                selectedFileIDs = Set(filteredFiles.map(\.id))
             }
+            .keyboardShortcut("a", modifiers: .command)
+
+            Button("Refresh") {
+                Task { await adbService.listFiles(path: adbService.currentPath) }
+            }
+            .keyboardShortcut("r", modifiers: .command)
+        }
+    }
+
+    private func selectIfNeeded(_ targets: [RemoteFile]) {
+        if targets.count == 1, let only = targets.first, !selectedFileIDs.contains(only.id) {
+            selectedFileIDs = [only.id]
+            selectedFile = only
+        }
+    }
+
+    private func copyFilesToMac(_ files: [RemoteFile]) {
+        Task {
+            do {
+                let tempDir = FileManager.default.temporaryDirectory
+                var urls: [NSURL] = []
+                for file in files where !file.isDirectory {
+                    let tempFile = tempDir.appendingPathComponent(file.name)
+                    try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
+                    urls.append(tempFile as NSURL)
+                }
+                if !urls.isEmpty {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.writeObjects(urls)
+                }
+            } catch {
+                adbService.lastError = "Failed to copy: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func chooseFilesToUpload() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.prompt = "Upload"
+        panel.begin { response in
+            if response == .OK { startUpload(panel.urls) }
         }
     }
 
@@ -543,15 +689,198 @@ struct MainExplorerView: View {
             }
         }
     }
-
-    private func startUpload(_ urls: [URL]) {
-        guard let fileURL = urls.first else { return }
-
+    
+    private func copyToMac(_ file: RemoteFile) {
         Task {
             do {
-                try await adbService.pushFile(localPath: fileURL.path, remotePath: adbService.currentPath)
+                let tempDir = FileManager.default.temporaryDirectory
+                let tempFile = tempDir.appendingPathComponent(file.name)
+                try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
+                
+                // Copy to pasteboard
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.writeObjects([tempFile as NSURL])
             } catch {
-                adbService.lastError = "Upload failed: \(error.localizedDescription)"
+                adbService.lastError = "Failed to copy: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    private func copySelectedToMac() {
+        guard !selectedFileIDs.isEmpty else { return }
+        
+        Task {
+            do {
+                let tempDir = FileManager.default.temporaryDirectory
+                var urls: [NSURL] = []
+                
+                for file in selectedFiles where !file.isDirectory {
+                    let tempFile = tempDir.appendingPathComponent(file.name)
+                    try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
+                    urls.append(tempFile as NSURL)
+                }
+                
+                if !urls.isEmpty {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.writeObjects(urls)
+                }
+            } catch {
+                adbService.lastError = "Failed to copy: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /// Builds a drag payload that lazily pulls the file(s) off the device and
+    /// hands Finder a real file/folder. Returning a live `Progress` is what
+    /// makes the drag reliable — without it the drag session can time out
+    /// before the (slow, network-bound) pull finishes.
+    private func createDragProvider(for files: [RemoteFile]) -> NSItemProvider {
+        let provider = NSItemProvider()
+        let items = files.isEmpty ? [] : files
+
+        // Single plain file → provide it with its native content type.
+        if items.count == 1, let file = items.first, !file.isDirectory {
+            let ext = (file.name as NSString).pathExtension
+            let utType = UTType(filenameExtension: ext) ?? .data
+            provider.suggestedName = file.name
+            provider.registerFileRepresentation(forTypeIdentifier: utType.identifier,
+                                                 fileOptions: [],
+                                                 visibility: .all) { completion in
+                let progress = Progress(totalUnitCount: 1)
+                Task {
+                    do {
+                        let dest = try await self.stageForDrag(items, folderName: file.name, single: true)
+                        progress.completedUnitCount = 1
+                        completion(dest, false, nil)
+                    } catch {
+                        completion(nil, false, error)
+                    }
+                }
+                return progress
+            }
+            return provider
+        }
+
+        // Multiple items, or a single folder → provide a folder.
+        let folderName = items.count == 1 ? (items.first?.name ?? "Android Files") : "Android Files"
+        provider.suggestedName = folderName
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.folder.identifier,
+                                             fileOptions: [],
+                                             visibility: .all) { completion in
+            let progress = Progress(totalUnitCount: Int64(max(1, items.count)))
+            Task {
+                do {
+                    let dest = try await self.stageForDrag(items, folderName: folderName, single: false)
+                    progress.completedUnitCount = Int64(max(1, items.count))
+                    completion(dest, false, nil)
+                } catch {
+                    completion(nil, false, error)
+                }
+            }
+            return progress
+        }
+        return provider
+    }
+
+    /// Pulls the given items into a unique temp location and returns the URL to
+    /// hand back to the drag session. `adb pull` recurses into directories, so
+    /// this works for files and folders alike.
+    private func stageForDrag(_ items: [RemoteFile], folderName: String, single: Bool) async throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DroidHouse-Drag-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        if single, let file = items.first {
+            let dest = root.appendingPathComponent(file.name)
+            try await adbService.pullFile(remotePath: file.fullPath, localPath: dest.path)
+            return dest
+        }
+
+        let batch = root.appendingPathComponent(folderName, isDirectory: true)
+        try FileManager.default.createDirectory(at: batch, withIntermediateDirectories: true)
+        for file in items {
+            let dest = batch.appendingPathComponent(file.name)
+            try await adbService.pullFile(remotePath: file.fullPath, localPath: dest.path)
+        }
+        return batch
+    }
+    
+    private func previewFile(_ file: RemoteFile) {
+        guard !file.isDirectory else { return }
+        Task {
+            do {
+                // Unique folder keeps the real filename (clean Quick Look title)
+                // while avoiding collisions / locked stale files.
+                let dir = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("DroidHouse-QL/\(UUID().uuidString)", isDirectory: true)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let tempFile = dir.appendingPathComponent(file.name)
+                try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
+
+                await MainActor.run {
+                    previewURL = tempFile
+                }
+            } catch {
+                adbService.lastError = "Failed to preview: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func previewSelectedFiles() {
+        // Prefer the last-clicked file; fall back to the first in the selection.
+        if let file = selectedFile, !file.isDirectory {
+            previewFile(file)
+        } else if let firstFile = selectedFiles.first(where: { !$0.isDirectory }) {
+            previewFile(firstFile)
+        }
+    }
+
+    private func startUpload(_ urls: [URL], into destination: String? = nil) {
+        guard !urls.isEmpty else { return }
+        let target = destination ?? adbService.currentPath
+
+        Task {
+            for fileURL in urls {
+                // Security-scoped access is required for files dragged in from
+                // outside the app's own containers.
+                let scoped = fileURL.startAccessingSecurityScopedResource()
+                defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
+
+                do {
+                    var isDirectory: ObjCBool = false
+                    FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
+
+                    if isDirectory.boolValue {
+                        try await uploadFolder(localURL: fileURL, remotePath: target)
+                    } else {
+                        try await adbService.pushFile(localPath: fileURL.path, remotePath: target)
+                    }
+                } catch {
+                    adbService.lastError = "Upload failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
+    private func uploadFolder(localURL: URL, remotePath: String) async throws {
+        let folderName = localURL.lastPathComponent
+        let newRemotePath = remotePath.hasSuffix("/") ? "\(remotePath)\(folderName)" : "\(remotePath)/\(folderName)"
+
+        // Create the destination folder at its true absolute path.
+        try await adbService.makeDirectory(path: newRemotePath)
+
+        let contents = try FileManager.default.contentsOfDirectory(at: localURL, includingPropertiesForKeys: [.isDirectoryKey])
+
+        for itemURL in contents {
+            var isDirectory: ObjCBool = false
+            FileManager.default.fileExists(atPath: itemURL.path, isDirectory: &isDirectory)
+
+            if isDirectory.boolValue {
+                try await uploadFolder(localURL: itemURL, remotePath: newRemotePath)
+            } else {
+                try await adbService.pushFile(localPath: itemURL.path, remotePath: newRemotePath)
             }
         }
     }
@@ -708,6 +1037,43 @@ struct BreadcrumbItem: Identifiable {
     let path: String
 }
 
+// MARK: - Compact Storage Badge
+
+struct CompactStorageBadge: View {
+    let info: ADBService.StorageInfo
+
+    private var tint: Color {
+        info.percent > 0.9 ? .red : (info.isInternal ? .accentColor : .purple)
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 3)
+                    .frame(width: 20, height: 20)
+                Circle()
+                    .trim(from: 0, to: info.percent)
+                    .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .frame(width: 20, height: 20)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.spring(response: 0.4, dampingFraction: 0.85), value: info.percent)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text(info.label)
+                    .font(.system(size: 10, weight: .semibold))
+                Text("\(info.available) free")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(.quaternary.opacity(0.4)))
+        .help("\(info.label): \(info.used) used of \(info.total) • \(info.available) available")
+    }
+}
+
 // MARK: - Photo Cell
 
 struct PhotoCell<MenuContent: View>: View {
@@ -772,3 +1138,7 @@ struct PhotoCell<MenuContent: View>: View {
         selectedFile: .constant(nil)
     )
 }
+
+
+// MARK: - Key Event Handler
+

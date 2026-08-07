@@ -17,6 +17,23 @@ struct GlassCardModifier: ViewModifier {
     }
 }
 
+struct TrueBlackModifier: ViewModifier {
+    @Environment(\.colorScheme) var colorScheme
+    
+    func body(content: Content) -> some View {
+        content
+            .background(
+                Group {
+                    if colorScheme == .dark {
+                        Color.black
+                    } else {
+                        Color.clear
+                    }
+                }
+            )
+    }
+}
+
 struct PillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -65,6 +82,10 @@ extension View {
 
     func hoverHighlight(isHovering: Bool) -> some View {
         modifier(HoverHighlightModifier(isHovering: isHovering))
+    }
+    
+    func trueBlackSupport() -> some View {
+        modifier(TrueBlackModifier())
     }
 }
 

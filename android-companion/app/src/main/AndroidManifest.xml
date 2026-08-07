@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Foreground services: the always-on bridge, plus screen capture -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+
+    <!-- Messaging bridge -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
+    <!-- AeroCast audio capture (AudioPlaybackCapture) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="DroidHouse Companion"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.DroidHouse">
+
+        <!-- Always-on bridge: Ktor on 127.0.0.1:8080 -->
+        <service
+            android:name=".DroidHouseCompanion"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- AeroCast: MediaProjection screen + audio streamer on port 8081 -->
+        <service
+            android:name=".AeroCastService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <!-- Notification mirror -->
+        <service
+            android:name=".NotificationService"
+            android:label="DroidHouse Notification Listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.DroidHouse">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Transparent shim that raises the system screen-capture prompt -->
+        <activity
+            android:name=".AeroCastConsentActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.DroidHouse.Transparent" />
+        <!--
+          NOTE: no android:noHistory here, deliberately.
+
+          noHistory finishes an activity as soon as it stops being visible. The
+          system's MediaProjection permission dialog takes focus on top of this
+          shim, which stops it — so with noHistory the shim was destroyed before
+          onActivityResult could ever fire. The consent was granted, the token
+          was thrown away, the service never started, and the Mac waited on port
+          8081 forever. This activity finishes itself explicitly instead.
+        -->
+
+        <!--
+          Clipboard → Mac. Android 10+ forbids background clipboard reads, so
+          these give the user explicit, always-working ways to push text:
+          PROCESS_TEXT puts "DroidHouse" in the text-selection toolbar next to
+          Copy, and SEND puts it in the share sheet.
+        -->
+        <activity
+            android:name=".ClipboardShareActivity"
+            android:exported="true"
+            android:label="Send to Mac"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.DroidHouse.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- Focus-holding shim so the QS tile can legally read the clipboard -->
+        <activity
+            android:name=".ClipboardCaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.DroidHouse.Transparent" />
+
+        <!-- Quick Settings tile: one tap pushes the clipboard from anywhere -->
+        <service
+            android:name=".ClipboardTileService"
+            android:exported="true"
+            android:label="Clip → Mac"
+            android:icon="@drawable/droid"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
