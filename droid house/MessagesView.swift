@@ -133,14 +133,14 @@ struct MessagesView: View {
                         )
                     }
 
-                    // Anchor for "scroll to the very bottom", which is more
-                    // reliable than targeting the last bubble when that bubble
-                    // is still being laid out.
+                    // Anchor for "scroll to the very bottom" with generous padding
+                    // so the last bubble, timestamp, and delivery ticks are 100% visible.
                     Color.clear
-                        .frame(height: 1)
+                        .frame(height: 28)
                         .id(Self.bottomAnchor)
                 }
-                .padding(.vertical, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
             }
             .animation(Spatial.Motion.bouncy, value: companionSync.activeMessages)
             .onChange(of: companionSync.activeMessages) { _, messages in
@@ -153,15 +153,23 @@ struct MessagesView: View {
                     }
                 } else {
                     // First load of a thread should *open* at the newest
-                    // message, with no visible scroll animation. The extra hop
-                    // through the next runloop lets the lazy stack finish
-                    // measuring before we jump.
+                    // message, with no visible scroll animation.
                     hasPositionedThread = true
                     proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
                     Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(40))
+                        try? await Task.sleep(for: .milliseconds(50))
                         proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
                     }
+                }
+            }
+            .onChange(of: replyingTo) { _, _ in
+                withAnimation(Spatial.Motion.fluid) {
+                    proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
+                }
+            }
+            .onChange(of: isInputFocused) { _, _ in
+                withAnimation(Spatial.Motion.fluid) {
+                    proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
                 }
             }
         }
