@@ -1,6 +1,6 @@
 <div align="center">
 
-  # 🌌 DROIDHOUSE
+  # Droid House
 
   ### **The Spatial Glass Companion for macOS & Android**
 
