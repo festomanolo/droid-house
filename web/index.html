@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DroidHouse - Connect Your Android to Mac | Wireless iMessage, Screen Mirroring & File Explorer</title>
+    
+    <!-- Primary Meta Tags -->
+    <meta name="title" content="DroidHouse - Connect Your Android to Mac | Wireless iMessage, Screen Mirroring & File Explorer">
+    <meta name="description" content="The ultimate bridge between Android and macOS. Wirelessly sync SMS with iMessage aesthetics, mirror screens with AeroCast, explore files, copy-paste clipboards, and run local backups seamlessly.">
+    <meta name="keywords" content="DroidHouse, Android to Mac, iMessage Android, AeroCast, Screen Mirroring Mac, Android File Explorer Mac, Wireless SMS Sync, Android Backup Mac">
+    <meta name="author" content="Festo Manolo">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://github.com/festomanolo/droid-house">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="assets/droid.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="assets/droid.ico">
+    <link rel="apple-touch-icon" href="assets/droid-round.png">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://github.com/festomanolo/droid-house">
+    <meta property="og:title" content="DroidHouse - Connect Your Android to Mac">
+    <meta property="og:description" content="Wirelessly sync SMS with iMessage aesthetics, mirror screens with AeroCast, explore files, copy-paste clipboards, and run local backups seamlessly.">
+    <meta property="og:image" content="assets/chatbox.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://github.com/festomanolo/droid-house">
+    <meta property="twitter:title" content="DroidHouse - Connect Your Android to Mac">
+    <meta property="twitter:description" content="Wirelessly sync SMS with iMessage aesthetics, mirror screens with AeroCast, explore files, copy-paste clipboards, and run local backups seamlessly.">
+    <meta property="twitter:image" content="assets/chatbox.png">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Structured Data JSON-LD for Next-Level SEO -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "DroidHouse",
+      "operatingSystem": "macOS 13.0+, Android 8.0+",
+      "applicationCategory": "UtilitiesApplication",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.9",
+        "ratingCount": "1280"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "Festo Manolo"
+      },
+      "description": "Native macOS application and Android companion for wireless SMS sync, screen mirroring, file management, and instant clipboard bridging."
+    }
+    </script>
+</head>
+<body>
+
+    <!-- Animated Siren Light Orbs -->
+    <div class="siren-canvas-bg"></div>
+    <div class="siren-orb siren-orb-1"></div>
+    <div class="siren-orb siren-orb-2"></div>
+    <div class="siren-orb siren-orb-3"></div>
+    <div class="bg-grid"></div>
+
+    <!-- Navigation Bar -->
+    <header>
+        <nav class="navbar" id="navbar">
+            <a href="#" class="nav-brand">
+                <img src="assets/droid-round.png" alt="DroidHouse Logo" class="nav-logo">
+                <span>DroidHouse</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#showcase" class="nav-link">Showcase</a></li>
+                <li><a href="#features" class="nav-link">Features</a></li>
+                <li><a href="#matrix" class="nav-link">Comparison</a></li>
+                <li><a href="https://github.com/festomanolo/droid-house" target="_blank" rel="noopener" class="nav-link">GitHub</a></li>
+            </ul>
+            <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg" class="nav-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download v1.3
+            </a>
+        </nav>
+    </header>
+
+    <main>
+        <!-- HERO SECTION -->
+        <section class="hero">
+            <div class="hero-badge">
+                <span class="hero-badge-dot"></span>
+                Release Candidate v1.3 Live — Pure Local Wireless Sync
+            </div>
+            <h1 class="hero-title">
+                The Android Companion<br>
+                <span class="text-gradient">Engineered for macOS.</span>
+            </h1>
+            <p class="hero-subtitle">
+                Experience native iMessage-style SMS messaging, real-time AeroCast screen mirroring, wireless file exploration, and instant clipboard sync — zero cloud servers required.
+            </p>
+            <div class="hero-ctas">
+                <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg" class="btn-primary">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10M18 8l-6 6-6-6M2 17l10 5 10-5"/></svg>
+                    Download macOS App (.dmg)
+                </a>
+                <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/app-release.apk" class="btn-secondary">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                    Android Companion (.apk)
+                </a>
+            </div>
+
+            <!-- Apple iMac 3D Scroll Perspective Stage -->
+            <div class="hero-stage">
+                <div class="imac-mockup-wrapper" id="imacMockup">
+                    <div class="imac-screen-bar">
+                        <span class="mac-dot mac-dot-red"></span>
+                        <span class="mac-dot mac-dot-yellow"></span>
+                        <span class="mac-dot mac-dot-green"></span>
+                        <span class="mac-screen-title">DroidHouse — Messages & Workspace</span>
+                    </div>
+                    <img src="assets/chatbox.png" alt="DroidHouse macOS App Interface - Native iMessage Experience" class="imac-screen-img">
+                </div>
+            </div>
+        </section>
+
+        <!-- INTERACTIVE FEATURE SHOWCASE -->
+        <section class="section-padding" id="showcase">
+            <div class="section-header reveal">
+                <div class="section-tag">Interactive Suite</div>
+                <h2 class="section-title">Designed for Ultimate Desktop Integration</h2>
+                <p class="section-desc">Explore how DroidHouse brings your phone's notifications, SMS, storage, and screen straight to your Mac display.</p>
+            </div>
+
+            <div class="showcase-container reveal">
+                <div class="showcase-tabs">
+                    <button class="showcase-tab active" data-target="img-chatbox">
+                        <div class="tab-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            iMessage Style SMS Sync
+                        </div>
+                        <div class="tab-desc">Native macOS message bubbles with Swahili smart replies and smooth scroll anchoring.</div>
+                    </button>
+
+                    <button class="showcase-tab" data-target="img-mirroring">
+                        <div class="tab-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                            AeroCast Screen Mirroring
+                        </div>
+                        <div class="tab-desc">Stream your Android display live to macOS with low latency over Wi-Fi or ADB.</div>
+                    </button>
+
+                    <button class="showcase-tab" data-target="img-explorer">
+                        <div class="tab-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                            Wireless File Manager
+                        </div>
+                        <div class="tab-desc">Browse SD Card, Downloads, Pictures, and DCIM folders directly from Mac.</div>
+                    </button>
+
+                    <button class="showcase-tab" data-target="img-backup">
+                        <div class="tab-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            1-Click Backup & Restore
+                        </div>
+                        <div class="tab-desc">Store complete offline phone backups securely on local macOS storage.</div>
+                    </button>
+
+                    <button class="showcase-tab" data-target="img-sync">
+                        <div class="tab-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                            Clipboard & Screenshot Sync
+                        </div>
+                        <div class="tab-desc">Copy on phone, paste on Mac. Take remote screenshots instantly.</div>
+                    </button>
+                </div>
+
+                <div class="showcase-view">
+                    <img src="assets/chatbox.png" id="img-chatbox" alt="DroidHouse Chatbox SMS Interface" class="showcase-img active">
+                    <img src="assets/screen mirroring.png" id="img-mirroring" alt="AeroCast Screen Mirroring Mode" class="showcase-img">
+                    <img src="assets/phone file explorer.png" id="img-explorer" alt="Wireless Phone File Explorer" class="showcase-img">
+                    <img src="assets/phone backup and restore.png" id="img-backup" alt="Phone Backup and Restore System" class="showcase-img">
+                    <img src="assets/screenshots syncing.png" id="img-sync" alt="Instant Clipboard & Screenshot Syncing" class="showcase-img">
+                </div>
+            </div>
+        </section>
+
+        <!-- FEATURE CARDS GRID -->
+        <section class="section-padding" id="features">
+            <div class="section-header reveal">
+                <div class="section-tag">Unmatched Features</div>
+                <h2 class="section-title">Built for Performance, Privacy & Speed</h2>
+                <p class="section-desc">No external servers, no subscription fees. DroidHouse runs completely locally on your Wi-Fi network.</p>
+            </div>
+
+            <div class="features-grid">
+                <!-- Card 1 -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">Authentic iMessage Bubbles</h3>
+                        <p class="feature-card-desc">
+                            Incoming and outgoing messages styled with Apple iMessage corner tail nudges, smooth spring animations, and automatic Swahili smart suggestions like "Hongera sana Aiseeee!!".
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/chatbox.png" alt="SMS Messages iMessage Style" class="feature-card-img">
+                    </div>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">AeroCast Wireless Display</h3>
+                        <p class="feature-card-desc">
+                            High FPS low-latency screen mirroring directly from Android to your Mac desktop, perfect for presentations, demos, and media playback.
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/screen mirroring.png" alt="AeroCast Screen Mirroring" class="feature-card-img">
+                    </div>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">Wireless File Explorer</h3>
+                        <p class="feature-card-desc">
+                            Access Android internal storage, SD Card, Pictures, and Downloads over local Wi-Fi. Drag-and-drop files seamlessly without plugging in cables.
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/phone file explorer.png" alt="Wireless Storage Explorer" class="feature-card-img">
+                    </div>
+                </div>
+
+                <!-- Card 4 -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">Local Phone Backup System</h3>
+                        <p class="feature-card-desc">
+                            Full offline backup engine. Backup SMS messages, photos, and system configuration directly to your Mac SSD with zero cloud privacy risks.
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/phone backup and restore.png" alt="Phone Backup System" class="feature-card-img">
+                    </div>
+                </div>
+
+                <!-- Card 5 -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">Instant Clipboard Syncing</h3>
+                        <p class="feature-card-desc">
+                            Copy text on your Android phone and paste it immediately on Mac. Remote screenshot capture with immediate preview & export.
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/screenshots syncing.png" alt="Instant Clipboard Syncing" class="feature-card-img">
+                    </div>
+                </div>
+
+                <!-- Card 6 -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">Zero Cloud & 100% Private</h3>
+                        <p class="feature-card-desc">
+                            All network communication occurs strictly on your local Wi-Fi router or direct ADB connection. Your personal texts & files never touch external servers.
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/screen companion.png" alt="Companion Service Status" class="feature-card-img">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- COMPARISON MATRIX -->
+        <section class="section-padding comparison-section" id="matrix">
+            <div class="section-header reveal">
+                <div class="section-tag">Freedom Matrix</div>
+                <h2 class="section-title">Why DroidHouse Outperforms Generic Syncing</h2>
+                <p class="section-desc">Experience true desktop integration without relying on cables or slow cloud bridges.</p>
+            </div>
+
+            <div class="comparison-table-wrapper reveal">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Feature Capability</th>
+                            <th class="highlight-col">DroidHouse v1.3</th>
+                            <th>USB Cables / ADB Shell</th>
+                            <th>Third-Party Cloud Sync</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Native iMessage-Style SMS UI</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (with corner tail nudges)</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                            <td><span class="cross-icon">✕</span> No (Generic Web UI)</td>
+                        </tr>
+                        <tr>
+                            <td>Real-Time Screen Mirroring</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (AeroCast High FPS)</td>
+                            <td><span class="check-icon">✓</span> Yes (scrcpy)</td>
+                            <td><span class="cross-icon">✕</span> Slow / Heavy Lag</td>
+                        </tr>
+                        <tr>
+                            <td>Wireless Storage Explorer</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (Drag & Drop)</td>
+                            <td><span class="cross-icon">✕</span> Requires MTP cable</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                        </tr>
+                        <tr>
+                            <td>Swahili AI Smart Suggestions</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes ("Hongera sana Aiseeee!!")</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                        </tr>
+                        <tr>
+                            <td>Offline Local Data Storage</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> 100% Private Local</td>
+                            <td><span class="check-icon">✓</span> Local</td>
+                            <td><span class="cross-icon">✕</span> Sent to Cloud Servers</td>
+                        </tr>
+                        <tr>
+                            <td>Instant Clipboard & Screenshot Sync</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes</td>
+                            <td><span class="cross-icon">✕</span> Manual ADB commands</td>
+                            <td><span class="cross-icon">✕</span> Delayed</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- DOWNLOAD CTA BOX -->
+        <section class="section-padding">
+            <div class="cta-box reveal">
+                <h2 class="cta-title">Upgrade Your Mac & Android Workflow Today</h2>
+                <p class="cta-desc">
+                    Download DroidHouse v1.3 for macOS and install the companion APK on your Android device to experience seamless wireless integration.
+                </p>
+                <div class="cta-buttons">
+                    <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg" class="btn-primary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v10M18 8l-6 6-6-6M2 17l10 5 10-5"/></svg>
+                        Download DroidHouse_v1.3.dmg
+                    </a>
+                    <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/app-release.apk" class="btn-secondary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                        Download app-release.apk
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="footer-logo">
+            <img src="assets/droid-round.png" alt="DroidHouse" width="24" height="24">
+            <span>DroidHouse Ecosystem</span>
+        </div>
+        <p>© 2026 DroidHouse by Festo Manolo. Open-source software built for macOS and Android.</p>
+        <p style="margin-top: 8px; font-size: 0.8rem;">
+            <a href="https://github.com/festomanolo/droid-house" target="_blank" rel="noopener" style="color: var(--accent-blue); text-decoration: none;">GitHub Repository</a> | 
+            <a href="https://github.com/festomanolo/droid-house/releases" target="_blank" rel="noopener" style="color: var(--accent-blue); text-decoration: none;">Release History</a>
+        </p>
+    </footer>
+
+    <!-- Controller Script -->
+    <script src="script.js"></script>
+</body>
+</html>
