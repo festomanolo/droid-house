@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import android.util.Range
 import android.util.Size
@@ -362,6 +363,7 @@ class StudioStreamService : Service() {
 
             val socket = server.accept()
             socket.tcpNoDelay = true
+            socket.sendBufferSize = 1024 * 1024
             clientSocket = socket
 
             val out = StudioStreamWriter(BufferedOutputStream(socket.getOutputStream(), 128 * 1024))
@@ -512,10 +514,20 @@ class StudioStreamService : Service() {
     fun applyLens(lensId: String): Boolean {
         lensSelection = lensId
         currentLens = lensId
-        val targetFacing = if (lensId.contains("front")) "front" else "back"
-        val facingChanged = (targetFacing != cameraFacing)
+        val manager = getSystemService(CameraManager::class.java) ?: return false
+        val targetCameraId = resolveCameraId(manager, lensId)
+        val activeCameraId = cameraDevice?.id
 
-        if (!facingChanged && captureSession != null && captureRequestBuilder != null) {
+        // If target lens requires a different physical camera sensor ID, reopen that camera
+        if (targetCameraId != activeCameraId) {
+            cameraHandler?.post {
+                reopenCamera(lensId)
+            }
+            return true
+        }
+
+        // If same camera (e.g. logical multi-camera supporting 0.5x-10x zoom), apply zoom ratio smoothly
+        if (captureSession != null && captureRequestBuilder != null) {
             applyLensZoomToBuilder(captureRequestBuilder!!, lensId)
             val session = captureSession ?: return false
             val builder = captureRequestBuilder ?: return false
@@ -699,10 +711,12 @@ class StudioStreamService : Service() {
             while (running.get()) {
                 val read = record.read(chunk, 0, chunk.size)
                 if (read > 0) {
+                    val durationUs = (read.toLong() * 1_000_000L) / (SAMPLE_RATE * CHANNELS * 2)
+                    val ptsUs = (SystemClock.elapsedRealtimeNanos() / 1000L) - durationUs
                     writer?.writePacket(
                         type = StudioStreamWriter.TYPE_AUDIO_FRAME,
                         flags = if (unprocessedMic) StudioStreamWriter.FLAG_UNPROCESSED else 0,
-                        presentationTimeUs = System.nanoTime() / 1000,
+                        presentationTimeUs = ptsUs,
                         payload = chunk,
                         offset = 0,
                         length = read
