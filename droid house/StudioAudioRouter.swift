@@ -40,7 +40,9 @@ final class StudioAudioRouter: ObservableObject {
     @Published var isVirtualMicRoutingActive: Bool = true {
         didSet {
             if isVirtualMicRoutingActive {
-                startVirtualMic()
+                if isStreamActive {
+                    startVirtualMic()
+                }
             } else {
                 stopVirtualMic()
             }
@@ -50,11 +52,18 @@ final class StudioAudioRouter: ObservableObject {
     @Published private(set) var activeTargetDeviceName: String = "Detecting..."
     @Published private(set) var isBoomAudioDetected: Bool = false
     @Published private(set) var isVirtualMicPumping: Bool = false
+    var isStreamActive: Bool = false
 
     // Local Speaker Monitor (Mac Speakers / Headphones)
     @Published var isMonitorEnabled: Bool = false {
         didSet {
-            if isMonitorEnabled { startMonitor() } else { stopMonitor() }
+            if isMonitorEnabled {
+                if isStreamActive {
+                    startMonitor()
+                }
+            } else {
+                stopMonitor()
+            }
         }
     }
     @Published var monitorVolume: Float = 0.8 {
@@ -82,12 +91,15 @@ final class StudioAudioRouter: ObservableObject {
     // MARK: - Lifecycle
 
     init() {
-        refreshDevices()
         setupAudioGraphs()
+        refreshDevices()
     }
 
     deinit {
-        // Stop engines
+        if virtualPlayer.isPlaying { virtualPlayer.stop() }
+        if virtualEngine.isRunning { virtualEngine.stop() }
+        if monitorPlayer.isPlaying { monitorPlayer.stop() }
+        if monitorEngine.isRunning { monitorEngine.stop() }
     }
 
     // MARK: - Device Discovery
@@ -231,8 +243,6 @@ final class StudioAudioRouter: ObservableObject {
             monitorEngine.connect(monitorPlayer, to: monitorEngine.mainMixerNode, format: format)
         }
         monitorPlayer.volume = monitorVolume
-
-        configureVirtualMicPipeline()
     }
 
     private func configureVirtualMicPipeline() {
@@ -264,7 +274,8 @@ final class StudioAudioRouter: ObservableObject {
             activeTargetDeviceName = device.isBoomAudio ? "\(device.name) (Virtual Mic)" : device.name
         }
 
-        if wasRunning || isVirtualMicRoutingActive {
+        // Only resume if it was ALREADY actively running and routing is enabled
+        if wasRunning && isVirtualMicRoutingActive && isStreamActive {
             startVirtualMic()
         }
     }
@@ -273,6 +284,11 @@ final class StudioAudioRouter: ObservableObject {
 
     func startVirtualMic() {
         guard !isVirtualEngineRunning else { return }
+        guard isVirtualMicRoutingActive else { return }
+        guard virtualPlayer.engine != nil else {
+            print("StudioAudioRouter: virtualPlayer is not attached to an engine")
+            return
+        }
         do {
             virtualEngine.prepare()
             try virtualEngine.start()
@@ -287,15 +303,23 @@ final class StudioAudioRouter: ObservableObject {
     }
 
     func stopVirtualMic() {
-        guard isVirtualEngineRunning else { return }
-        virtualPlayer.stop()
-        virtualEngine.stop()
+        if virtualPlayer.isPlaying {
+            virtualPlayer.stop()
+        }
+        if virtualEngine.isRunning {
+            virtualEngine.stop()
+        }
         isVirtualEngineRunning = false
         isVirtualMicPumping = false
     }
 
     func startMonitor() {
         guard !isMonitorEngineRunning else { return }
+        guard isMonitorEnabled else { return }
+        guard monitorPlayer.engine != nil else {
+            print("StudioAudioRouter: monitorPlayer is not attached to an engine")
+            return
+        }
         do {
             monitorEngine.prepare()
             try monitorEngine.start()
@@ -308,9 +332,12 @@ final class StudioAudioRouter: ObservableObject {
     }
 
     func stopMonitor() {
-        guard isMonitorEngineRunning else { return }
-        monitorPlayer.stop()
-        monitorEngine.stop()
+        if monitorPlayer.isPlaying {
+            monitorPlayer.stop()
+        }
+        if monitorEngine.isRunning {
+            monitorEngine.stop()
+        }
         isMonitorEngineRunning = false
     }
 
@@ -357,12 +384,12 @@ final class StudioAudioRouter: ObservableObject {
         routedPeakDbR = max(peakR, routedPeakDbR - 1.5)
 
         // Feed BoomAudio / virtual mic
-        if isVirtualEngineRunning && isVirtualMicRoutingActive {
+        if isVirtualEngineRunning && isVirtualMicRoutingActive && virtualPlayer.isPlaying {
             virtualPlayer.scheduleBuffer(buffer, completionHandler: nil)
         }
 
         // Feed local speaker monitor if enabled
-        if isMonitorEngineRunning && isMonitorEnabled {
+        if isMonitorEngineRunning && isMonitorEnabled && monitorPlayer.isPlaying {
             monitorPlayer.scheduleBuffer(buffer, completionHandler: nil)
         }
     }
