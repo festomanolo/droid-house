@@ -224,6 +224,8 @@ struct ContentView: View {
                     MessagesView(selectedContact: selectedContact)
                 case .aeroCast:
                     AeroCastView(adbService: adbService)
+                case .studioInput:
+                    StudioCamView(adbService: adbService)
                 case .roster:
                     RosterView(adbService: adbService)
                 case .clipboard:
