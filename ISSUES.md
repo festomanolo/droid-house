@@ -147,3 +147,25 @@ This document tracks system issues identified, analyzed, and resolved across mac
   4. Added `virtualPlayer.isPlaying` guards before scheduling incoming audio buffers in `ingestPCM(_:)`.
   5. Synchronized stream activation across `StudioCamEngine.start(serial:)` and `StudioCamEngine.stop()`.
 
+---
+
+### [Issue #009]: Video and Audio Recording Latency, Stutter, and Timestamp Drift in Studio Mode
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `StudioStreamService.kt`, `StudioCaptureManager.swift`, `StudioCamEngine.swift`
+- **Symptom:**
+  When capturing 60 FPS video or recording audio in Studio Broadcast mode, the UI experienced micro-stutters, recorded MP4 videos suffered from dropped frames, and audio playback drifted out of sync with video.
+- **Root Cause Analysis:**
+  1. **Clock Domain Mismatch on Android:**
+     `Camera2` Surface video frames were stamped by Android's hardware encoder using `SystemClock.elapsedRealtimeNanos()` (`CLOCK_BOOTTIME`). Meanwhile, `pumpAudio()` was generating timestamps with `System.nanoTime()` (`CLOCK_MONOTONIC`). Because `CLOCK_MONOTONIC` pauses during kernel suspend while `CLOCK_BOOTTIME` runs continuously, the timestamps on Samsung devices differed by millions of microseconds (hours of offset). When passed to macOS `AVAssetWriter`, the audio timestamps fell either outside the session start window or far ahead, triggering sample buffer drops and desync.
+  2. **Main Thread Saturation from Real-Time Media Encoding & Disk I/O:**
+     `StudioCaptureManager` ran entirely on `@MainActor`. Appending 60 FPS 1080p BGRA pixel buffers (~480 MB/sec uncompressed bandwidth) and writing uncompressed 48 kHz WAV PCM buffers directly to disk with synchronous `AVAudioFile.write(from:)` blocked the main runloop, causing `AVAssetWriterInput.isReadyForMoreMediaData` to drop frames.
+  3. **Skewed Latency Smoothing:**
+     `trackLatency()` in `StudioCamEngine` was calculating packet drift for alternating video and audio frames together, skewing latency smoothing due to differing packet intervals.
+- **Resolution:**
+  1. Updated `StudioStreamService.kt` to stamp audio packets with `(SystemClock.elapsedRealtimeNanos() / 1000L) - durationUs`, perfectly aligning audio PTS with Camera2 video frames on the same `CLOCK_BOOTTIME` timeline.
+  2. Built `StudioAssetRecorder` as an asynchronous background worker isolated on `com.droidhouse.recorderQueue` (`userInitiated` QoS). All `AVAssetWriterInputPixelBufferAdaptor.append`, `CMSampleBuffer` synthesis, and `AVAudioFile.write` operations now run off the main thread.
+  3. Enforced strictly monotonic timestamp pacing (`lastVideoPTS` and `lastAudioPTS`) to eliminate network jitter artifacts in recorded media.
+  4. Scoped latency tracking strictly to video frame packets.
+
+
