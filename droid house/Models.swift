@@ -5,6 +5,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
     case device = "Internal Storage"
     case messages = "Messages"
     case aeroCast = "AeroCast"
+    case studioInput = "Studio Cam & Mic"
     case roster = "Smart Sync"
     case clipboard = "Clipboard Sync"
     case screenshots = "Screenshots"
@@ -17,6 +18,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .device: return "internaldrive.fill"
         case .messages: return "message.fill"
         case .aeroCast: return "airplayvideo"
+        case .studioInput: return "video.badge.waveform.fill"
         case .roster: return "tablecells.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .screenshots: return "photo.on.rectangle.angled"
@@ -29,6 +31,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .device: return .blue
         case .messages: return .green
         case .aeroCast: return .dhAccentViolet
+        case .studioInput: return .dhAccentMint
         case .roster: return .dhAccentMint
         case .clipboard: return .orange
         case .screenshots: return .purple
@@ -42,6 +45,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .device: return "Browse the device filesystem"
         case .messages: return "Read and reply to SMS threads"
         case .aeroCast: return "Mirror the screen and audio"
+        case .studioInput: return "Camera & studio mic input for Mac"
         case .roster: return "Raw, unmerged tabular data"
         case .clipboard: return "Two-way clipboard bridge"
         case .screenshots: return "Live screenshot gallery"
@@ -53,7 +57,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
     /// paired with the file inspector.
     var usesInspector: Bool {
         switch self {
-        case .aeroCast, .roster, .transfers: return false
+        case .aeroCast, .studioInput, .roster, .transfers: return false
         default: return true
         }
     }
