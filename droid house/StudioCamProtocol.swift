@@ -117,9 +117,19 @@ struct StudioCamStreamParser {
 
     private static let maxPayload: UInt32 = 64 * 1024 * 1024 // 64 MB ceiling
     private var buffer = Data()
+    private var readOffset: Int = 0
     private var handshakeComplete = false
 
     mutating func append(_ data: Data) {
+        // If buffer was fully consumed, reset to reuse allocated memory
+        if readOffset > 0 && readOffset == buffer.count {
+            buffer.removeAll(keepingCapacity: true)
+            readOffset = 0
+        } else if readOffset > 64 * 1024 {
+            // Compact buffer when consumed bytes exceed 64 KB
+            buffer.removeSubrange(0..<readOffset)
+            readOffset = 0
+        }
         buffer.append(data)
     }
 
@@ -127,38 +137,44 @@ struct StudioCamStreamParser {
         var packets: [StudioCamProtocol.Packet] = []
 
         if !handshakeComplete {
-            guard buffer.count >= StudioCamProtocol.headerLength else { return [] }
-            let magic = [UInt8](buffer.prefix(4))
-            guard magic == StudioCamProtocol.magic else { throw ParseError.badMagic }
-            let version = buffer[buffer.startIndex + 4]
+            let available = buffer.count - readOffset
+            guard available >= StudioCamProtocol.headerLength else { return [] }
+            let hStart = readOffset
+            guard buffer[hStart] == StudioCamProtocol.magic[0],
+                  buffer[hStart + 1] == StudioCamProtocol.magic[1],
+                  buffer[hStart + 2] == StudioCamProtocol.magic[2],
+                  buffer[hStart + 3] == StudioCamProtocol.magic[3] else {
+                throw ParseError.badMagic
+            }
+            let version = buffer[hStart + 4]
             guard version == StudioCamProtocol.version else {
                 throw ParseError.unsupportedVersion(version)
             }
-            buffer.removeFirst(StudioCamProtocol.headerLength)
+            readOffset += StudioCamProtocol.headerLength
             handshakeComplete = true
         }
 
-        while buffer.count >= StudioCamProtocol.packetHeaderLength {
-            let header = [UInt8](buffer.prefix(StudioCamProtocol.packetHeaderLength))
-            let rawType = header[0]
+        while (buffer.count - readOffset) >= StudioCamProtocol.packetHeaderLength {
+            let hOffset = readOffset
+            let rawType = buffer[hOffset]
             guard let type = StudioCamProtocol.PacketType(rawValue: rawType) else {
                 throw ParseError.unknownPacketType(rawType)
             }
-            let flags = StudioCamProtocol.PacketFlags(rawValue: header[1])
+            let flags = StudioCamProtocol.PacketFlags(rawValue: buffer[hOffset + 1])
 
             var pts: Int64 = 0
-            for i in 2..<10 { pts = (pts << 8) | Int64(header[i]) }
+            for i in 2..<10 { pts = (pts << 8) | Int64(buffer[hOffset + i]) }
 
             var length: UInt32 = 0
-            for i in 10..<14 { length = (length << 8) | UInt32(header[i]) }
+            for i in 10..<14 { length = (length << 8) | UInt32(buffer[hOffset + i]) }
 
             guard length <= Self.maxPayload else { throw ParseError.payloadTooLarge(length) }
 
             let total = StudioCamProtocol.packetHeaderLength + Int(length)
-            guard buffer.count >= total else { break }
+            guard (buffer.count - readOffset) >= total else { break }
 
-            let pStart = buffer.index(buffer.startIndex, offsetBy: StudioCamProtocol.packetHeaderLength)
-            let pEnd = buffer.index(buffer.startIndex, offsetBy: total)
+            let pStart = hOffset + StudioCamProtocol.packetHeaderLength
+            let pEnd = hOffset + total
             let payload = Data(buffer[pStart..<pEnd])
 
             packets.append(
@@ -170,7 +186,12 @@ struct StudioCamStreamParser {
                 )
             )
 
-            buffer.removeFirst(total)
+            readOffset += total
+        }
+
+        if readOffset > 0 && readOffset == buffer.count {
+            buffer.removeAll(keepingCapacity: true)
+            readOffset = 0
         }
 
         return packets
@@ -178,6 +199,7 @@ struct StudioCamStreamParser {
 
     mutating func reset() {
         buffer.removeAll(keepingCapacity: false)
+        readOffset = 0
         handshakeComplete = false
     }
 }
