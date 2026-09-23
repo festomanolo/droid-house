@@ -37,20 +37,10 @@ final class StudioCaptureManager: ObservableObject {
     @Published private(set) var lastSavedThumbnail: NSImage?
     @Published var toastNotification: String?
 
-    // Video Recording with AVAssetWriter
-    private var assetWriter: AVAssetWriter?
-    private var videoWriterInput: AVAssetWriterInput?
-    private var audioWriterInput: AVAssetWriterInput?
-    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
-    private var isWriterSessionStarted = false
-    private var videoStartTime: CMTime?
+    // High-performance background asset recorder
+    private let recorder = StudioAssetRecorder()
     private var recordedVideoURL: URL?
-
-    // Audio Recording with AVAudioFile (Broadcast WAV 48 kHz Linear PCM)
-    private var audioFile: AVAudioFile?
     private var audioRecordingURL: URL?
-    private var audioRecordFormat: AVAudioFormat?
-
     private var tickerTimer: Timer?
 
     // MARK: - Lifecycle
@@ -123,54 +113,7 @@ final class StudioCaptureManager: ObservableObject {
         recordedVideoURL = fileURL
 
         do {
-            let writer = try AVAssetWriter(outputURL: fileURL, fileType: .mp4)
-
-            // Video Input (H.264)
-            let videoSettings: [String: Any] = [
-                AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: width,
-                AVVideoHeightKey: height,
-                AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: 25_000_000,
-                    AVVideoExpectedSourceFrameRateKey: fps,
-                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
-                ]
-            ]
-            let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-            vInput.expectsMediaDataInRealTime = true
-
-            let sourceAttrs: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: width,
-                kCVPixelBufferHeightKey as String: height
-            ]
-            let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-                assetWriterInput: vInput,
-                sourcePixelBufferAttributes: sourceAttrs
-            )
-
-            // Audio Input (AAC 48 kHz stereo 256 kbps)
-            let audioSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 48000,
-                AVNumberOfChannelsKey: 2,
-                AVEncoderBitRateKey: 256000
-            ]
-            let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-            aInput.expectsMediaDataInRealTime = true
-
-            if writer.canAdd(vInput) { writer.add(vInput) }
-            if writer.canAdd(aInput) { writer.add(aInput) }
-
-            writer.startWriting()
-
-            self.assetWriter = writer
-            self.videoWriterInput = vInput
-            self.audioWriterInput = aInput
-            self.pixelBufferAdaptor = adaptor
-            self.isWriterSessionStarted = false
-            self.videoStartTime = nil
-
+            try recorder.startVideo(outputURL: fileURL, width: width, height: height, fps: fps)
             let now = Date()
             self.currentMode = .recordingVideo(startDate: now)
             startTicker(from: now, fileURL: fileURL)
@@ -181,120 +124,24 @@ final class StudioCaptureManager: ObservableObject {
     }
 
     func appendVideoPixelBuffer(_ pixelBuffer: CVPixelBuffer, presentationTime: CMTime) {
-        guard case .recordingVideo = currentMode,
-              let writer = assetWriter,
-              let adaptor = pixelBufferAdaptor,
-              adaptor.assetWriterInput.isReadyForMoreMediaData else { return }
-
-        if !isWriterSessionStarted {
-            writer.startSession(atSourceTime: presentationTime)
-            videoStartTime = presentationTime
-            isWriterSessionStarted = true
-        }
-
-        adaptor.append(pixelBuffer, withPresentationTime: presentationTime)
+        guard case .recordingVideo = currentMode else { return }
+        recorder.appendVideo(pixelBuffer: pixelBuffer, presentationTime: presentationTime)
     }
 
     func appendAudioPCM(_ pcm: Data, frameCount: Int, presentationTime: CMTime) {
-        guard case .recordingVideo = currentMode,
-              isWriterSessionStarted,
-              let audioInput = audioWriterInput,
-              audioInput.isReadyForMoreMediaData else { return }
-
-        // Construct CMSampleBuffer for audio
-        var blockBuffer: CMBlockBuffer?
-        let allocator = kCFAllocatorDefault
-        let status = CMBlockBufferCreateWithMemoryBlock(
-            allocator: allocator,
-            memoryBlock: nil,
-            blockLength: pcm.count,
-            blockAllocator: nil,
-            customBlockSource: nil,
-            offsetToData: 0,
-            dataLength: pcm.count,
-            flags: 0,
-            blockBufferOut: &blockBuffer
-        )
-        guard status == kCMBlockBufferNoErr, let blockBuffer else { return }
-
-        pcm.withUnsafeBytes { raw in
-            if let base = raw.baseAddress {
-                CMBlockBufferReplaceDataBytes(
-                    with: base,
-                    blockBuffer: blockBuffer,
-                    offsetIntoDestination: 0,
-                    dataLength: pcm.count
-                )
-            }
-        }
-
-        var asbd = AudioStreamBasicDescription(
-            mSampleRate: 48000,
-            mFormatID: kAudioFormatLinearPCM,
-            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
-            mBytesPerPacket: 4,
-            mFramesPerPacket: 1,
-            mBytesPerFrame: 4,
-            mChannelsPerFrame: 2,
-            mBitsPerChannel: 16,
-            mReserved: 0
-        )
-
-        var formatDesc: CMAudioFormatDescription?
-        CMAudioFormatDescriptionCreate(
-            allocator: allocator,
-            asbd: &asbd,
-            layoutSize: 0,
-            layout: nil,
-            magicCookieSize: 0,
-            magicCookie: nil,
-            extensions: nil,
-            formatDescriptionOut: &formatDesc
-        )
-        guard let formatDesc else { return }
-
-        var sampleBuffer: CMSampleBuffer?
-        var timing = CMSampleTimingInfo(
-            duration: CMTime(value: CMTimeValue(frameCount), timescale: 48000),
-            presentationTimeStamp: presentationTime,
-            decodeTimeStamp: .invalid
-        )
-
-        var sampleSize = pcm.count
-        let sbStatus = CMSampleBufferCreateReady(
-            allocator: allocator,
-            dataBuffer: blockBuffer,
-            formatDescription: formatDesc,
-            sampleCount: frameCount,
-            sampleTimingEntryCount: 1,
-            sampleTimingArray: &timing,
-            sampleSizeEntryCount: 1,
-            sampleSizeArray: &sampleSize,
-            sampleBufferOut: &sampleBuffer
-        )
-
-        if sbStatus == noErr, let sampleBuffer {
-            audioInput.append(sampleBuffer)
-        }
+        guard case .recordingVideo = currentMode else { return }
+        recorder.appendAudio(pcm: pcm, frameCount: frameCount, presentationTime: presentationTime)
     }
 
     func stopVideoRecording() {
-        guard case .recordingVideo = currentMode, let writer = assetWriter else { return }
-
+        guard case .recordingVideo = currentMode else { return }
         stopTicker()
-        videoWriterInput?.markAsFinished()
-        audioWriterInput?.markAsFinished()
+        currentMode = .idle
 
         let destination = recordedVideoURL
-        writer.finishWriting { [weak self] in
+        recorder.stopVideo { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                self.currentMode = .idle
-                self.assetWriter = nil
-                self.videoWriterInput = nil
-                self.audioWriterInput = nil
-                self.pixelBufferAdaptor = nil
-
                 if let destination {
                     self.lastSavedURL = destination
                     self.generateVideoThumbnail(for: destination)
@@ -317,12 +164,9 @@ final class StudioCaptureManager: ObservableObject {
             toastNotification = "Could not initialize WAV audio format"
             return
         }
-        audioRecordFormat = format
 
         do {
-            let file = try AVAudioFile(forWriting: fileURL, settings: format.settings, commonFormat: .pcmFormatInt16, interleaved: true)
-            self.audioFile = file
-
+            try recorder.startAudioOnly(outputURL: fileURL, format: format)
             let now = Date()
             self.currentMode = .recordingAudio(startDate: now)
             startTicker(from: now, fileURL: fileURL)
@@ -333,28 +177,15 @@ final class StudioCaptureManager: ObservableObject {
     }
 
     func appendAudioOnlyPCM(_ pcm: Data, frameCount: Int) {
-        guard case .recordingAudio = currentMode,
-              let file = audioFile,
-              let format = audioRecordFormat else { return }
-
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)) else { return }
-        buffer.frameLength = AVAudioFrameCount(frameCount)
-
-        pcm.withUnsafeBytes { raw in
-            if let base = raw.baseAddress {
-                memcpy(buffer.int16ChannelData?[0], base, pcm.count)
-            }
-        }
-
-        try? file.write(from: buffer)
+        guard case .recordingAudio = currentMode else { return }
+        recorder.appendAudioOnly(pcm: pcm, frameCount: frameCount)
     }
 
     func stopAudioOnlyRecording() {
         guard case .recordingAudio = currentMode else { return }
         stopTicker()
-
-        audioFile = nil
         currentMode = .idle
+        recorder.stopAudioOnly()
 
         if let url = audioRecordingURL {
             lastSavedURL = url
@@ -418,5 +249,240 @@ final class StudioCaptureManager: ObservableObject {
     func revealLastSavedInFinder() {
         guard let url = lastSavedURL else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+}
+
+// MARK: - Dedicated Background Asset Recorder
+
+final class StudioAssetRecorder: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "com.droidhouse.recorderQueue", qos: .userInitiated)
+    private var assetWriter: AVAssetWriter?
+    private var videoInput: AVAssetWriterInput?
+    private var audioInput: AVAssetWriterInput?
+    private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
+    private var isSessionStarted = false
+    private var sessionStartTime: CMTime = .invalid
+    private var lastVideoPTS: CMTime = .invalid
+    private var lastAudioPTS: CMTime = .invalid
+    private var audioFile: AVAudioFile?
+    private var audioFormat: AVAudioFormat?
+
+    func startVideo(outputURL: URL, width: Int, height: Int, fps: Int) throws {
+        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: 25_000_000,
+                AVVideoExpectedSourceFrameRateKey: fps,
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+            ]
+        ]
+        let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+        vInput.expectsMediaDataInRealTime = true
+
+        let sourceAttrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height
+        ]
+        let adapt = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: vInput,
+            sourcePixelBufferAttributes: sourceAttrs
+        )
+
+        let audioSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 48000,
+            AVNumberOfChannelsKey: 2,
+            AVEncoderBitRateKey: 256000
+        ]
+        let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+        aInput.expectsMediaDataInRealTime = true
+
+        if writer.canAdd(vInput) { writer.add(vInput) }
+        if writer.canAdd(aInput) { writer.add(aInput) }
+
+        writer.startWriting()
+
+        queue.sync {
+            self.assetWriter = writer
+            self.videoInput = vInput
+            self.audioInput = aInput
+            self.adaptor = adapt
+            self.isSessionStarted = false
+            self.sessionStartTime = .invalid
+            self.lastVideoPTS = .invalid
+            self.lastAudioPTS = .invalid
+        }
+    }
+
+    func appendVideo(pixelBuffer: CVPixelBuffer, presentationTime: CMTime) {
+        queue.async {
+            guard let writer = self.assetWriter,
+                  let adaptor = self.adaptor else { return }
+
+            if !self.isSessionStarted {
+                writer.startSession(atSourceTime: presentationTime)
+                self.sessionStartTime = presentationTime
+                self.lastVideoPTS = presentationTime
+                self.isSessionStarted = true
+            }
+
+            var pts = presentationTime
+            if self.lastVideoPTS.isValid && pts <= self.lastVideoPTS {
+                pts = CMTimeAdd(self.lastVideoPTS, CMTime(value: 1, timescale: 1_000_000))
+            }
+
+            if adaptor.assetWriterInput.isReadyForMoreMediaData {
+                adaptor.append(pixelBuffer, withPresentationTime: pts)
+                self.lastVideoPTS = pts
+            }
+        }
+    }
+
+    func appendAudio(pcm: Data, frameCount: Int, presentationTime: CMTime) {
+        queue.async {
+            guard self.isSessionStarted,
+                  let audioInput = self.audioInput,
+                  self.sessionStartTime.isValid else { return }
+
+            var pts = presentationTime
+            if pts < self.sessionStartTime {
+                pts = self.sessionStartTime
+            }
+            if self.lastAudioPTS.isValid && pts <= self.lastAudioPTS {
+                pts = CMTimeAdd(self.lastAudioPTS, CMTime(value: CMTimeValue(frameCount), timescale: 48000))
+            }
+
+            if audioInput.isReadyForMoreMediaData {
+                if let sampleBuffer = self.createAudioSampleBuffer(pcm: pcm, frameCount: frameCount, pts: pts) {
+                    audioInput.append(sampleBuffer)
+                    self.lastAudioPTS = pts
+                }
+            }
+        }
+    }
+
+    func stopVideo(completion: @escaping () -> Void) {
+        queue.async {
+            self.videoInput?.markAsFinished()
+            self.audioInput?.markAsFinished()
+            self.assetWriter?.finishWriting {
+                self.queue.async {
+                    self.assetWriter = nil
+                    self.videoInput = nil
+                    self.audioInput = nil
+                    self.adaptor = nil
+                    self.isSessionStarted = false
+                    completion()
+                }
+            }
+        }
+    }
+
+    func startAudioOnly(outputURL: URL, format: AVAudioFormat) throws {
+        let file = try AVAudioFile(forWriting: outputURL, settings: format.settings, commonFormat: .pcmFormatInt16, interleaved: true)
+        queue.sync {
+            self.audioFile = file
+            self.audioFormat = format
+        }
+    }
+
+    func appendAudioOnly(pcm: Data, frameCount: Int) {
+        queue.async {
+            guard let file = self.audioFile, let format = self.audioFormat else { return }
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)) else { return }
+            buffer.frameLength = AVAudioFrameCount(frameCount)
+            pcm.withUnsafeBytes { raw in
+                if let base = raw.baseAddress {
+                    memcpy(buffer.int16ChannelData?[0], base, pcm.count)
+                }
+            }
+            try? file.write(from: buffer)
+        }
+    }
+
+    func stopAudioOnly() {
+        queue.sync {
+            self.audioFile = nil
+            self.audioFormat = nil
+        }
+    }
+
+    private func createAudioSampleBuffer(pcm: Data, frameCount: Int, pts: CMTime) -> CMSampleBuffer? {
+        var blockBuffer: CMBlockBuffer?
+        let allocator = kCFAllocatorDefault
+        let status = CMBlockBufferCreateWithMemoryBlock(
+            allocator: allocator,
+            memoryBlock: nil,
+            blockLength: pcm.count,
+            blockAllocator: nil,
+            customBlockSource: nil,
+            offsetToData: 0,
+            dataLength: pcm.count,
+            flags: 0,
+            blockBufferOut: &blockBuffer
+        )
+        guard status == kCMBlockBufferNoErr, let blockBuffer else { return nil }
+
+        pcm.withUnsafeBytes { raw in
+            if let base = raw.baseAddress {
+                CMBlockBufferReplaceDataBytes(
+                    with: base,
+                    blockBuffer: blockBuffer,
+                    offsetIntoDestination: 0,
+                    dataLength: pcm.count
+                )
+            }
+        }
+
+        var asbd = AudioStreamBasicDescription(
+            mSampleRate: 48000,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 4,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: 4,
+            mChannelsPerFrame: 2,
+            mBitsPerChannel: 16,
+            mReserved: 0
+        )
+
+        var formatDesc: CMAudioFormatDescription?
+        CMAudioFormatDescriptionCreate(
+            allocator: allocator,
+            asbd: &asbd,
+            layoutSize: 0,
+            layout: nil,
+            magicCookieSize: 0,
+            magicCookie: nil,
+            extensions: nil,
+            formatDescriptionOut: &formatDesc
+        )
+        guard let formatDesc else { return nil }
+
+        var sampleBuffer: CMSampleBuffer?
+        var timing = CMSampleTimingInfo(
+            duration: CMTime(value: CMTimeValue(frameCount), timescale: 48000),
+            presentationTimeStamp: pts,
+            decodeTimeStamp: .invalid
+        )
+
+        var sampleSize = pcm.count
+        let sbStatus = CMSampleBufferCreateReady(
+            allocator: allocator,
+            dataBuffer: blockBuffer,
+            formatDescription: formatDesc,
+            sampleCount: frameCount,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleSizeEntryCount: 1,
+            sampleSizeArray: &sampleSize,
+            sampleBufferOut: &sampleBuffer
+        )
+
+        return sbStatus == noErr ? sampleBuffer : nil
     }
 }
