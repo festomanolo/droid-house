@@ -109,3 +109,41 @@ This document tracks system issues identified, analyzed, and resolved across mac
   1. Created `StudioVirtualCamManager.swift` to monitor system virtual camera status via `AVCaptureDevice.DiscoverySession`.
   2. Provided administrative installer script for the CoreMediaIO DAL plugin bundle.
   3. Integrated frame publishing bridge for streaming decoded `CVPixelBuffer` frames to virtual camera consumers.
+
+---
+
+### [Issue #008]: SIGILL / EXC_BAD_INSTRUCTION Crash on Opening Studio Cam & Mic (`AVAE_CheckNodeHasEngine`)
+- **Status:** Closed / Resolved
+- **Severity:** Critical
+- **Component:** `StudioAudioRouter.swift`, `StudioCamEngine.swift`
+- **Symptom:**
+  Clicking "Studio Cam & Mic" in the navigation sidebar immediately crashed the macOS application with `EXC_BAD_INSTRUCTION (SIGILL)` triggered by `[AVAudioPlayerNode play]` inside `StudioAudioRouter.startVirtualMic()`.
+- **Crash Trace Analysis:**
+  ```text
+  Exception Type:    EXC_BAD_INSTRUCTION (SIGILL)
+  Application Specific Backtrace 0:
+  3   AVFAudio      _ZNK15AVAudioNodeImpl23AVAE_CheckNodeHasEngineEv + 298
+  4   AVFAudio      _ZN21AVAudioPlayerNodeImpl9StartImplEP11AVAudioTime + 358
+  5   AVFAudio      -[AVAudioPlayerNode play] + 43
+  6   droid house   StudioAudioRouter.startVirtualMic() + 145
+  7   droid house   StudioAudioRouter.configureVirtualMicPipeline() + 1005
+  8   droid house   StudioAudioRouter.selectedDeviceID.didSet + 129
+  9   droid house   StudioAudioRouter.refreshDevices() + 2878
+  10  droid house   StudioAudioRouter.init() + 1102
+  11  droid house   StudioCamEngine.init() + 775
+  ```
+- **Root Cause:**
+  1. In `StudioAudioRouter.init()`, `refreshDevices()` was invoked before `setupAudioGraphs()`.
+  2. Inside `refreshDevices()`, detecting BoomAudio or a virtual sink immediately set `self.selectedDeviceID = boom.id`.
+  3. The `didSet` observer invoked `configureVirtualMicPipeline()`.
+  4. Because `isVirtualMicRoutingActive` was `true`, `configureVirtualMicPipeline()` evaluated `if wasRunning || isVirtualMicRoutingActive` as `true` and invoked `startVirtualMic()`.
+  5. `startVirtualMic()` called `virtualPlayer.play()`. At this point in object initialization, `setupAudioGraphs()` had not yet been executed, meaning `virtualEngine.attach(virtualPlayer)` was never called. AVFoundation asserted `AVAE_CheckNodeHasEngine()`, throwing an unhandled Objective-C exception that terminated the process on the main thread.
+- **Resolution:**
+  1. Corrected initialization sequence in `StudioAudioRouter.init()`: `setupAudioGraphs()` is now executed first so `virtualEngine.attach(virtualPlayer)` and `monitorEngine.attach(monitorPlayer)` are established before any device enumeration occurs.
+  2. Introduced an `isStreamActive` state flag: `configureVirtualMicPipeline()` and device change observers now only start or resume playback if active streaming is engaged (`wasRunning && isVirtualMicRoutingActive && isStreamActive`).
+  3. Added explicit defensive assertions in `startVirtualMic()` and `startMonitor()`:
+     - `guard virtualPlayer.engine != nil else { return }`
+     - `guard monitorPlayer.engine != nil else { return }`
+  4. Added `virtualPlayer.isPlaying` guards before scheduling incoming audio buffers in `ingestPCM(_:)`.
+  5. Synchronized stream activation across `StudioCamEngine.start(serial:)` and `StudioCamEngine.stop()`.
+
