@@ -155,7 +155,7 @@ struct SidebarView: View {
                     systemImage: section.systemImage,
                     tint: section.tintColor,
                     isActive: selectedSection == section,
-                    isDisabled: section == .aeroCast && selectedDevice == nil,
+                    isDisabled: (section == .aeroCast || section == .studioInput) && selectedDevice == nil,
                     action: {
                         withAnimation(Spatial.Motion.fluid) { selectedSection = section }
                     }
@@ -167,7 +167,7 @@ struct SidebarView: View {
 
     /// The companion-backed panes, in the order the product presents them.
     private static let companionSections: [NavigationSection] = [
-        .messages, .aeroCast, .roster, .clipboard, .screenshots, .transfers
+        .messages, .aeroCast, .studioInput, .roster, .clipboard, .screenshots, .transfers
     ]
 
     // MARK: - Bookmarks
