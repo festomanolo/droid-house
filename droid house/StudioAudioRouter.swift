@@ -2,6 +2,7 @@ import Foundation
 import CoreAudio
 import AudioToolbox
 import AVFAudio
+import Accelerate
 import Combine
 
 // MARK: - Studio Audio Router
@@ -248,7 +249,7 @@ final class StudioAudioRouter: ObservableObject {
     private func configureVirtualMicPipeline() {
         guard let deviceID = selectedDeviceID else { return }
 
-        let wasRunning = isVirtualEngineRunning
+        let wasRunning = isVirtualEngineRunning || virtualEngine.isRunning
         if wasRunning {
             virtualPlayer.stop()
             virtualEngine.stop()
@@ -269,6 +270,11 @@ final class StudioAudioRouter: ObservableObject {
                 print("StudioAudioRouter: failed to set current device on output unit: \(status)")
             }
         }
+
+        // Reconnect mainMixerNode to outputNode using the target device's native hardware format
+        // (crucial for BoomAudio 6-channel virtual sink)
+        let hwFormat = virtualEngine.outputNode.outputFormat(forBus: 0)
+        virtualEngine.connect(virtualEngine.mainMixerNode, to: virtualEngine.outputNode, format: hwFormat)
 
         if let device = availableOutputDevices.first(where: { $0.id == deviceID }) {
             activeTargetDeviceName = device.isBoomAudio ? "\(device.name) (Virtual Mic)" : device.name
@@ -345,6 +351,7 @@ final class StudioAudioRouter: ObservableObject {
 
     /// Ingests raw 48 kHz stereo 16-bit PCM from phone and schedules it onto
     /// the virtual audio engine (BoomAudio) and/or the local speaker monitor.
+    /// Uses Apple Accelerate vDSP for SIMD vectorized conversion.
     func ingestPCM(_ pcm: Data) {
         let channels = 2
         let bytesPerSample = 2
@@ -356,32 +363,30 @@ final class StudioAudioRouter: ObservableObject {
         buffer.frameLength = AVAudioFrameCount(frameCount)
         guard let channelData = buffer.floatChannelData else { return }
 
-        var maxL: Float = 0
-        var maxR: Float = 0
-
         pcm.withUnsafeBytes { raw in
-            guard let base = raw.baseAddress else { return }
-            let samples = base.assumingMemoryBound(to: Int16.self)
-            let scale = Float(1.0 / 32768.0)
+            guard let base = raw.baseAddress?.assumingMemoryBound(to: Int16.self) else { return }
+            var scale = Float(1.0 / 32768.0)
 
-            for i in 0..<frameCount {
-                let sL = Float(Int16(littleEndian: samples[i * 2])) * scale
-                let sR = Float(Int16(littleEndian: samples[i * 2 + 1])) * scale
+            // Vectorized deinterleave & conversion from Int16 to Float32 via Accelerate vDSP:
+            // Channel 0 (Left): stride 2
+            vDSP_vflt16(base, 2, channelData[0], 1, vDSP_Length(frameCount))
+            vDSP_vsmul(channelData[0], 1, &scale, channelData[0], 1, vDSP_Length(frameCount))
 
-                channelData[0][i] = sL
-                channelData[1][i] = sR
+            // Channel 1 (Right): stride 2 starting at base + 1
+            vDSP_vflt16(base.advanced(by: 1), 2, channelData[1], 1, vDSP_Length(frameCount))
+            vDSP_vsmul(channelData[1], 1, &scale, channelData[1], 1, vDSP_Length(frameCount))
 
-                let absL = abs(sL)
-                let absR = abs(sR)
-                if absL > maxL { maxL = absL }
-                if absR > maxR { maxR = absR }
-            }
+            // Vectorized peak finding in SIMD hardware
+            var maxL: Float = 0
+            var maxR: Float = 0
+            vDSP_maxmgv(channelData[0], 1, &maxL, vDSP_Length(frameCount))
+            vDSP_maxmgv(channelData[1], 1, &maxR, vDSP_Length(frameCount))
+
+            let peakL = maxL > 0.0001 ? 20.0 * log10(maxL) : -60.0
+            let peakR = maxR > 0.0001 ? 20.0 * log10(maxR) : -60.0
+            routedPeakDbL = max(peakL, routedPeakDbL - 1.5)
+            routedPeakDbR = max(peakR, routedPeakDbR - 1.5)
         }
-
-        let peakL = maxL > 0.0001 ? 20.0 * log10(maxL) : -60.0
-        let peakR = maxR > 0.0001 ? 20.0 * log10(maxR) : -60.0
-        routedPeakDbL = max(peakL, routedPeakDbL - 1.5)
-        routedPeakDbR = max(peakR, routedPeakDbR - 1.5)
 
         // Feed BoomAudio / virtual mic
         if isVirtualEngineRunning && isVirtualMicRoutingActive && virtualPlayer.isPlaying {
