@@ -322,7 +322,7 @@ struct StudioCamView: View {
                 .frame(width: 9, height: 9)
                 .shadow(color: .red.opacity(0.8), radius: 4)
 
-            Text(engine.captureManager.currentMode == .recordingVideo(startDate: Date()) ? "REC VIDEO" : "REC AUDIO")
+            Text(isRecordingVideo ? "REC VIDEO" : "REC AUDIO")
                 .font(.system(size: 10, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
 
