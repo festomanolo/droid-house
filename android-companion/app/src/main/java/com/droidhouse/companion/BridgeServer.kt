@@ -288,6 +288,75 @@ class BridgeServer(
                     AeroCastService.requestStop(appContext)
                     call.respond(SimpleResult(true, "AeroCast stopped"))
                 }
+
+                // ------------------------------------------------------ studio
+                get("/api/studio/status") {
+                    call.respond(StudioStreamService.stateSnapshot())
+                }
+
+                get("/api/studio/cameras") {
+                    call.respond(StudioStreamService.enumerateCameras(appContext))
+                }
+
+                post("/api/studio/start") {
+                    val request = runCatching { call.receive<StudioStartRequest>() }
+                        .getOrDefault(StudioStartRequest())
+
+                    val started = StudioStreamService.requestStart(
+                        context = appContext,
+                        camera = request.camera,
+                        lensId = request.lensId,
+                        resolution = request.resolution,
+                        fps = request.fps,
+                        bitRate = request.bitRate,
+                        mic = request.mic,
+                        micUnprocessed = request.micUnprocessed
+                    )
+
+                    if (started) {
+                        call.respond(StudioStreamService.stateSnapshot())
+                    } else {
+                        call.respond(
+                            HttpStatusCode.ServiceUnavailable,
+                            SimpleResult(false, "Could not start Studio Broadcast")
+                        )
+                    }
+                }
+
+                post("/api/studio/stop") {
+                    StudioStreamService.requestStop(appContext)
+                    call.respond(SimpleResult(true, "Studio Broadcast stopped"))
+                }
+
+                post("/api/studio/lens") {
+                    val request = runCatching { call.receive<StudioLensRequest>() }.getOrNull()
+                    if (request != null) {
+                        val success = StudioStreamService.switchLens(request.lensId)
+                        call.respond(SimpleResult(success, if (success) "Switched lens to ${request.lensId}" else "Failed to switch lens"))
+                    } else {
+                        call.respond(HttpStatusCode.BadRequest, SimpleResult(false, "Invalid lens request body"))
+                    }
+                }
+
+                post("/api/studio/zoom") {
+                    val request = runCatching { call.receive<StudioZoomRequest>() }.getOrNull()
+                    if (request != null) {
+                        val success = StudioStreamService.setZoom(request.zoomRatio)
+                        call.respond(SimpleResult(success, if (success) "Zoom set to ${request.zoomRatio}x" else "Failed to set zoom"))
+                    } else {
+                        call.respond(HttpStatusCode.BadRequest, SimpleResult(false, "Invalid zoom request body"))
+                    }
+                }
+
+                post("/api/studio/torch") {
+                    val request = runCatching { call.receive<StudioTorchRequest>() }.getOrNull()
+                    if (request != null) {
+                        val success = StudioStreamService.setTorch(request.enabled)
+                        call.respond(SimpleResult(success, if (success) "Torch set to ${request.enabled}" else "Failed to set torch"))
+                    } else {
+                        call.respond(HttpStatusCode.BadRequest, SimpleResult(false, "Invalid torch request body"))
+                    }
+                }
             }
         }
 
