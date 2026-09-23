@@ -105,6 +105,7 @@ final class StudioCamEngine: NSObject, ObservableObject {
     private var framesWindow = 0
     private var firstPTS: Int64?
     private var firstWallClock: CFTimeInterval?
+    private var lastMeterUpdateTime: CFTimeInterval = 0
 
     // MARK: - Lifecycle
 
@@ -352,11 +353,18 @@ final class StudioCamEngine: NSObject, ObservableObject {
         guard let conn = connection else { return }
         conn.receive(minimumIncompleteLength: 1, maximumLength: 128 * 1024) { [weak self] data, _, isComplete, err in
             guard let self else { return }
+
+            // Immediately request next segment from socket buffer to prevent pipeline stall
+            if !isComplete && err == nil {
+                self.receiveLoop()
+            }
+
             if let data, !data.isEmpty {
                 Task { @MainActor in
                     self.ingestBytes(data)
                 }
             }
+
             if err != nil || isComplete {
                 Task { @MainActor in
                     if self.state.isLive {
@@ -364,9 +372,6 @@ final class StudioCamEngine: NSObject, ObservableObject {
                     }
                 }
                 return
-            }
-            Task { @MainActor in
-                self.receiveLoop()
             }
         }
     }
@@ -591,52 +596,26 @@ final class StudioCamEngine: NSObject, ObservableObject {
         let frameCount = pcm.count / (channels * bytesPerSample)
         guard frameCount > 0 else { return }
 
-        var maxL: Float = 0
-        var maxR: Float = 0
-        var sumSquaresL: Float = 0
-        var sumSquaresR: Float = 0
-
-        pcm.withUnsafeBytes { raw in
-            guard let base = raw.baseAddress else { return }
-            let samples = base.assumingMemoryBound(to: Int16.self)
-
-            for i in 0..<frameCount {
-                let sampleL = Float(Int16(littleEndian: samples[i * 2])) / 32768.0
-                let sampleR = Float(Int16(littleEndian: samples[i * 2 + 1])) / 32768.0
-
-                let absL = abs(sampleL)
-                let absR = abs(sampleR)
-
-                if absL > maxL { maxL = absL }
-                if absR > maxR { maxR = absR }
-
-                sumSquaresL += sampleL * sampleL
-                sumSquaresR += sampleR * sampleR
-            }
-        }
-
-        let rmsL = sqrt(sumSquaresL / Float(frameCount))
-        let rmsR = sqrt(sumSquaresR / Float(frameCount))
-
-        let peakDbL = maxL > 0.0001 ? 20.0 * log10(maxL) : -60.0
-        let peakDbR = maxR > 0.0001 ? 20.0 * log10(maxR) : -60.0
-        let rmsDbL = rmsL > 0.0001 ? 20.0 * log10(rmsL) : -60.0
-        let rmsDbR = rmsR > 0.0001 ? 20.0 * log10(rmsR) : -60.0
-
-        // Smooth with fast attack, gentle release
-        audioPeakDbL = max(peakDbL, audioPeakDbL - 1.5)
-        audioPeakDbR = max(peakDbR, audioPeakDbR - 1.5)
-        audioRmsDbL = max(rmsDbL, audioRmsDbL - 1.0)
-        audioRmsDbR = max(rmsDbR, audioRmsDbR - 1.0)
-        isAudioClipping = maxL >= 0.999 || maxR >= 0.999
-
-        // 1. Ingest into CoreAudio router -> BoomAudio virtual mic & speaker monitor
+        // 1. Ingest into CoreAudio router -> BoomAudio virtual mic & speaker monitor (Accelerate vDSP)
         audioRouter.ingestPCM(pcm)
 
-        // 2. Feed active media recordings
+        // 2. Feed active media recordings (background serial queue)
         let cmPts = CMTime(value: pts, timescale: 1_000_000)
         captureManager.appendAudioPCM(pcm, frameCount: frameCount, presentationTime: cmPts)
         captureManager.appendAudioOnlyPCM(pcm, frameCount: frameCount)
+
+        // 3. Smooth UI VU meter levels at 30 FPS (eliminates main-thread view thrashing)
+        let now = CACurrentMediaTime()
+        if now - lastMeterUpdateTime >= 0.033 {
+            lastMeterUpdateTime = now
+            let pL = audioRouter.routedPeakDbL
+            let pR = audioRouter.routedPeakDbR
+            audioPeakDbL = pL
+            audioPeakDbR = pR
+            audioRmsDbL = max(pL - 6.0, -60.0)
+            audioRmsDbR = max(pR - 6.0, -60.0)
+            isAudioClipping = pL >= -0.5 || pR >= -0.5
+        }
     }
 
     // MARK: - REST Bridge Controls
