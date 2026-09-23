@@ -168,4 +168,27 @@ This document tracks system issues identified, analyzed, and resolved across mac
   3. Enforced strictly monotonic timestamp pacing (`lastVideoPTS` and `lastAudioPTS`) to eliminate network jitter artifacts in recorded media.
   4. Scoped latency tracking strictly to video frame packets.
 
+---
+
+### [Issue #010]: End-to-End Latency and Sensor Optimization Across CoreAudio, Video Pipeline, and Multi-Camera Sensors
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `StudioCamProtocol.swift`, `AeroCastProtocol.swift`, `StudioAudioRouter.swift`, `StudioCamEngine.swift`, `StudioCamView.swift`, `StudioStreamService.kt`
+- **Symptom:**
+  During 60 FPS studio streaming, CPU usage spiked due to redundant memory copying during video parsing, BoomAudio 6-channel routing experienced format negotiation mismatches, UI vu-meters caused unnecessary main-thread render passes, and telephoto/ultra-wide lens switches remained stuck on the main sensor on certain Android multi-camera arrays.
+- **Root Cause Analysis:**
+  1. **$O(N^2)$ Stream Buffer Shifting:** `StudioCamStreamParser.drain()` invoked `buffer.removeFirst(total)` on every drained packet, triggering an $O(N)$ `memmove` over hundreds of kilobytes of incoming video payload on every frame.
+  2. **Heap Thrashing in NAL Parsing:** `AnnexB.nalUnits` copied entire frame byte buffers into `[UInt8]` arrays on every frame, generating multiple short-lived heap allocations at 60 FPS.
+  3. **BoomAudio 6-Channel Mixer Configuration:** BoomAudio exposes 6 output channels. Setting `kAudioOutputUnitProperty_CurrentDevice` without reconnecting `mainMixerNode` with `hwFormat` led to channel format mismatches.
+  4. **Unvectorized PCM Math & Unthrottled UI Metering:** Audio PCM was decoded in scalar Swift loops twice (once in `StudioCamEngine` and once in `StudioAudioRouter`), and every 10-20ms packet pushed `@Published` state changes to `@MainActor`, thrashing SwiftUI view rendering.
+  5. **Camera2 Physical Sensor Selection:** When switching between back camera lenses (`back_wide`, `back_ultra`, `back_tele`), `facingChanged` was `false`. If the physical sensor IDs were distinct (e.g. camera 0 for wide, camera 2 for ultra-wide, camera 3 for telephoto), the service never called `reopenCamera` and instead clamped `CONTROL_ZOOM_RATIO` to 1.0x.
+- **Resolution:**
+  1. Refactored `StudioCamStreamParser` with an internal `readOffset` cursor, reducing buffer compaction to amortized $O(1)$.
+  2. Replaced `[UInt8]` heap copying in `AnnexB.nalUnits` with `data.withUnsafeBytes` and pre-allocated AVCC buffer capacities.
+  3. Reconnected `virtualEngine.mainMixerNode` to `virtualEngine.outputNode` with the native hardware format upon device assignment.
+  4. Vectorized Int16 to Float32 conversion and peak detection with Apple's `Accelerate` framework (`vDSP_vflt16`, `vDSP_vsmul`, `vDSP_maxmgv`). Throttled UI VU meter updates to 30 FPS.
+  5. Updated `StudioStreamService.kt` to compare `targetCameraId != activeCameraId` across physical camera IDs, cleanly reopening sensors when switching between ultra-wide, telephoto, and wide lenses.
+  6. Configured 1MB socket send buffer (`socket.sendBufferSize = 1024 * 1024`) on Android companion server to absorb high-bitrate I-frame bursts.
+  7. Corrected recording badge condition in `StudioCamView.swift` to check `isRecordingVideo`.
+
 
