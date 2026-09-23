@@ -147,3 +147,66 @@ data class RosterPayload(
     val rows: List<List<String>>,
     val truncated: Boolean = false
 )
+
+@Serializable
+data class StudioStreamInfoPayload(
+    val width: Int,
+    val height: Int,
+    val frameRate: Int,
+    val videoBitRate: Int,
+    val sampleRate: Int,
+    val channels: Int,
+    val lensFacing: String,
+    val lensName: String,
+    val deviceModel: String? = null,
+    val micSource: String? = null
+)
+
+@Serializable
+data class StudioStatusPayload(
+    val streaming: Boolean,
+    val port: Int,
+    val width: Int,
+    val height: Int,
+    val fps: Int,
+    val bitRate: Int,
+    val sampleRate: Int,
+    val channels: Int,
+    val lensId: String,
+    val micSource: String,
+    val message: String
+)
+
+@Serializable
+data class StudioStartRequest(
+    val camera: Boolean = true,
+    val lensId: String = "back_wide",
+    val resolution: String = "1080p",
+    val fps: Int = 60,
+    val bitRate: Int = 35_000_000,
+    val mic: Boolean = true,
+    val micUnprocessed: Boolean = true
+)
+
+@Serializable
+data class StudioCameraInfo(
+    val id: String,
+    val facing: String,
+    val focalLength: Float,
+    val title: String
+)
+
+@Serializable
+data class StudioLensRequest(
+    val lensId: String
+)
+
+@Serializable
+data class StudioZoomRequest(
+    val zoomRatio: Float
+)
+
+@Serializable
+data class StudioTorchRequest(
+    val enabled: Boolean
+)
