@@ -95,13 +95,20 @@ Apple built the **Walled Garden** to keep you trapped into buying iPhones. If yo
 - **No Temp Files**: Previews images & videos directly from Android RAM over `exec-out`.
 - **Drag & Drop**: Drag multi-file selections or whole folder trees between Mac and Android.
 
+### 🎙️ **5. Studio Camera & BoomAudio Virtual Mic for Mac**
+- **System Virtual Mic**: Automatically routes bit-perfect 48 kHz stereo PCM into BoomAudio so Zoom, Teams, Meet, Discord, and FaceTime detect phone audio with zero delay.
+- **Triple-Lens Switching**: Live sensor toggling between 0.5x Ultra-Wide, 1.0x Main Lens, 3.0x Telephoto, and Front Portrait.
+- **Smooth Zoom & Torch**: Continuous 0.5x–10x slider + quick preset pills, plus flashlight toggle.
+- **Native Mac Capture**: Instant high-res photo snapshots (PNG to Pictures), 60 FPS video recording with synced audio (MP4 to Movies), and uncompressed studio audio-only recording (WAV to Music).
+- **CoreMediaIO Virtual Webcam**: Hardware-accelerated VideoToolbox decompression into raw CVPixelBuffers for system webcam feeds.
+
 ---
 
 ## 📦 **Latest Release**
 
 | Version | Highlights & Changes | macOS Download | Android Download |
 | :--- | :--- | :---: | :---: |
-| **`v1.3`** *(Latest RC)* | **iOS Green Bubbles, Double-Tick Reports & 6.1MB Release Candidate**<br />• Official iOS Messages green bubbles (`#34C759`) & double checkmark delivery reports (`✓✓`).<br />• Jetpack Compose redesign: Plus Jakarta Sans font, 100% circular action chips.<br />• macOS Settings color scheme, faint hairline dividers, and fluid glass tap physics.<br />• Optimized 6.1MB R8 release build with ProGuard security. | [Download DMG (v1.3)](https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg) | [Download APK (v1.3)](https://github.com/festomanolo/droid-house/releases/download/v1.3/app-release.apk) |
+| **`v1.5`** *(Latest)* | **Studio Camera & Microphone Input, BoomAudio Routing & Media Capture**<br />• CoreAudio automatic routing to BoomAudio virtual mic for Zoom, Teams, and Meet.<br />• Triple-lens switching: Ultra-Wide (0.5x), Main (1.0x), and Telephoto (3.0x) with continuous 10x zoom & torch.<br />• Native Mac capture suite: High-res snapshots (Pictures), 60 FPS video + audio (Movies), and studio WAV (Music).<br />• Hardware-accelerated VideoToolbox decoding and CoreMediaIO virtual webcam support. | [Download DMG (v1.5)](https://github.com/festomanolo/droid-house/releases/download/v1.5/DroidHouse_v1.5.dmg) | [Download APK (v1.5)](https://github.com/festomanolo/droid-house/releases/download/v1.5/app-debug.apk) |
 
 ---
 
