@@ -141,11 +141,15 @@ final class StudioCamEngine: NSObject, ObservableObject {
         ppsData = nil
         firstPTS = nil
         firstWallClock = nil
-        displayLayer.flush()
-
         // Activate virtual mic routing so BoomAudio receives audio immediately
+        audioRouter.isStreamActive = true
         audioRouter.refreshDevices()
-        audioRouter.startVirtualMic()
+        if audioRouter.isVirtualMicRoutingActive {
+            audioRouter.startVirtualMic()
+        }
+        if audioRouter.isMonitorEnabled {
+            audioRouter.startMonitor()
+        }
 
         beginStatsTimer()
 
@@ -161,6 +165,7 @@ final class StudioCamEngine: NSObject, ObservableObject {
         connection?.cancel()
         connection = nil
 
+        audioRouter.isStreamActive = false
         audioRouter.stopVirtualMic()
         audioRouter.stopMonitor()
 
