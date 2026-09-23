@@ -171,50 +171,53 @@ struct AeroCastStreamParser {
 
 enum AnnexB {
     /// Splits an Annex-B buffer into its constituent NAL units, dropping the
-    /// 3- or 4-byte start codes.
+    /// 3- or 4-byte start codes without intermediate array allocations.
     static func nalUnits(in data: Data) -> [Data] {
         var units: [Data] = []
-        let bytes = [UInt8](data)
-        guard bytes.count > 3 else { return units }
+        guard data.count > 3 else { return units }
 
-        // Index of the first byte *after* each start code.
-        var starts: [Int] = []
-        var i = 0
-        while i + 2 < bytes.count {
-            if bytes[i] == 0 && bytes[i + 1] == 0 {
-                if bytes[i + 2] == 1 {
-                    starts.append(i + 3)
-                    i += 3
-                    continue
-                } else if i + 3 < bytes.count && bytes[i + 2] == 0 && bytes[i + 3] == 1 {
-                    starts.append(i + 4)
-                    i += 4
-                    continue
+        data.withUnsafeBytes { raw in
+            guard let ptr = raw.bindMemory(to: UInt8.self).baseAddress else { return }
+            let count = data.count
+
+            var starts: [Int] = []
+            starts.reserveCapacity(8)
+            var i = 0
+            while i + 2 < count {
+                if ptr[i] == 0 && ptr[i + 1] == 0 {
+                    if ptr[i + 2] == 1 {
+                        starts.append(i + 3)
+                        i += 3
+                        continue
+                    } else if i + 3 < count && ptr[i + 2] == 0 && ptr[i + 3] == 1 {
+                        starts.append(i + 4)
+                        i += 4
+                        continue
+                    }
                 }
+                i += 1
             }
-            i += 1
-        }
 
-        guard !starts.isEmpty else { return units }
+            guard !starts.isEmpty else { return }
 
-        for (index, start) in starts.enumerated() {
-            // A NAL runs until the start code of the next one — which sits 3 or
-            // 4 bytes before that NAL's first payload byte.
-            let end: Int
-            if index + 1 < starts.count {
-                let nextStart = starts[index + 1]
-                var codeLength = 3
-                if nextStart >= 4 &&
-                    bytes[nextStart - 4] == 0 && bytes[nextStart - 3] == 0 &&
-                    bytes[nextStart - 2] == 0 && bytes[nextStart - 1] == 1 {
-                    codeLength = 4
+            units.reserveCapacity(starts.count)
+            for (index, start) in starts.enumerated() {
+                let end: Int
+                if index + 1 < starts.count {
+                    let nextStart = starts[index + 1]
+                    var codeLength = 3
+                    if nextStart >= 4 &&
+                        ptr[nextStart - 4] == 0 && ptr[nextStart - 3] == 0 &&
+                        ptr[nextStart - 2] == 0 && ptr[nextStart - 1] == 1 {
+                        codeLength = 4
+                    }
+                    end = nextStart - codeLength
+                } else {
+                    end = count
                 }
-                end = nextStart - codeLength
-            } else {
-                end = bytes.count
+                guard end > start else { continue }
+                units.append(data.subdata(in: start..<end))
             }
-            guard end > start else { continue }
-            units.append(Data(bytes[start..<end]))
         }
 
         return units
@@ -231,9 +234,10 @@ enum AnnexB {
     static let idr: UInt8 = 5
 
     /// Converts Annex-B NAL units into the 4-byte-length-prefixed AVCC layout
-    /// that `CMBlockBuffer` / VideoToolbox expects.
+    /// that `CMBlockBuffer` / VideoToolbox expects with single-allocation buffer.
     static func avccBuffer(from nals: [Data]) -> Data {
-        var out = Data()
+        let totalSize = nals.reduce(0) { $0 + 4 + $1.count }
+        var out = Data(capacity: totalSize)
         for nal in nals {
             var length = UInt32(nal.count).bigEndian
             withUnsafeBytes(of: &length) { out.append(contentsOf: $0) }
