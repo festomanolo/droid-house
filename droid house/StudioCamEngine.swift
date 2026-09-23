@@ -397,6 +397,7 @@ final class StudioCamEngine: NSObject, ObservableObject {
         case .videoFrame:
             videoBytesWindow += packet.payload.count
             decodeVideoFrame(packet)
+            trackLatency(pts: packet.presentationTimeUs)
 
         case .audioConfig:
             break
@@ -409,8 +410,6 @@ final class StudioCamEngine: NSObject, ObservableObject {
         case .heartbeat:
             break
         }
-
-        trackLatency(pts: packet.presentationTimeUs)
     }
 
     private func trackLatency(pts: Int64) {
