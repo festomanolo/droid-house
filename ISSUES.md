@@ -308,5 +308,28 @@ This document tracks system issues identified, analyzed, and resolved across mac
   3. Enhanced Android companion `MacRemoteControlScreen.kt` to allow up to 32 characters and switched to standard ASCII keyboard (`KeyboardType.Ascii`).
   4. Hardened CGNAT Tailscale address detection in `MacRemoteControlHost.detectTailscaleIP()` to identify any `100.x.y.z` interface address directly.
 
+---
 
-
+### [Issue #018]: Lack of Multi-Touch Gestures (2-Finger Scroll, 3-Finger Mission Control), Physical Tactile Scroll Wheel, and Mac Trackpad Acceleration Curve
+- **Status:** Closed / Resolved
+- **Severity:** Medium
+- **Component:** `MacRemoteControlScreen.kt`, `MacRemoteClient.kt`
+- **Symptom:**
+  1. The Android companion trackpad previously only handled single-touch dragging and tapping. Two-finger natural scrolling and three-finger swipe gestures for macOS Mission Control were missing.
+  2. There was no dedicated tactile scroll wheel for rapid, thumb-based scrolling with mechanical notch feedback.
+  3. External pointer movement on macOS felt sluggish and overly decelerated during slow movements while failing to cover enough screen distance during fast flicks, due to synthetic CGEvent injection lacking native macOS trackpad non-linear acceleration.
+- **Root Cause Analysis:**
+  1. `detectDragGestures` in Jetpack Compose was constrained to single pointer tracking, dropping multi-pointer events.
+  2. Lack of a dedicated 3D cylindrical scroll wheel widget with mechanical ratchet haptic tick feedback.
+  3. Linear raw $(dx, dy)$ scaling without dynamic power-law velocity acceleration or exponential moving average (EMA) jitter smoothing.
+- **Resolution:**
+  1. **Multi-Touch Trackpad Engine:** Implemented low-level `awaitPointerEventScope` gesture recognizer supporting:
+     - 1-Finger: Smooth cursor movement, tap for left click, double-tap, stationary long-press for right click.
+     - 2-Finger: Real-time 2-finger horizontal and vertical scrolling (`mouse_scroll`), plus 2-finger tap for right click.
+     - 3-Finger: Swipe up triggers Mission Control (`open -a "Mission Control"`), swipe down triggers Show Desktop (`show_desktop`), with heavy haptic confirmation.
+  2. **Tactile Physical Scroll Wheel:** Implemented 3D cylindrical notched scroll wheel component docked at the right-center of the trackpad with dynamic rotating rubber treads, perspective compression, LED illumination detent, and Android `EFFECT_TICK` mechanical haptic vibration on every ratchet detent.
+  3. **Apple macOS Trackpad Acceleration Engine:** Implemented non-linear velocity response curve in `MacRemoteClient.sendMouseMove`:
+     - Precision Zone ($< 3.0$ px): $0.85\times$ linear damping for pixel-perfect targeting.
+     - Linear Zone ($3.0 - 10.0$ px): $1.0\times$ to $1.35\times$ progressive tracking.
+     - Dynamic Acceleration Zone ($10.0 - 24.0$ px): power-law exponent.
+     - High-Velocity Flicks ($> 24.0$ px): logarithmic boost up to $3.85\times$ with 2-sample EMA jitter smoothing.
