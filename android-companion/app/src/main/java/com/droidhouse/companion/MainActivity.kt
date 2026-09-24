@@ -37,9 +37,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ScreenShare
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.ScreenShare
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -95,9 +95,12 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     var showSplash by remember { mutableStateOf(true) }
+                    var currentScreen by remember { mutableStateOf("home") }
 
                     if (showSplash) {
                         AndroidSplashScreen(onFinished = { showSplash = false })
+                    } else if (currentScreen == "remote") {
+                        MacRemoteControlScreen(onNavigateBack = { currentScreen = "home" })
                     } else {
                         CompanionScreen(
                             onRequestPermissions = { requestRuntimePermissions() },
@@ -107,7 +110,8 @@ class MainActivity : ComponentActivity() {
                             onRestartService = { startCompanionService() },
                             onCaptureClipboard = {
                                 ClipboardBridge.captureFromSystem(applicationContext, "app-button")
-                            }
+                            },
+                            onOpenRemote = { currentScreen = "remote" }
                         )
                     }
                 }
@@ -187,7 +191,8 @@ private fun CompanionScreen(
     onRequestPermissions: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onRestartService: () -> Unit,
-    onCaptureClipboard: () -> Boolean
+    onCaptureClipboard: () -> Boolean,
+    onOpenRemote: () -> Unit
 ) {
     val context = LocalContext.current
     val auroraPhase = rememberAuroraPhase()
@@ -247,6 +252,7 @@ private fun CompanionScreen(
                 onOpenNotificationSettings = onOpenNotificationSettings
             )
             StatsStrip(state)
+            MacRemoteCard(onOpenRemote = onOpenRemote)
             BridgeCard(state, onRestartService)
             ClipboardCard(state, onCaptureClipboard)
             AeroCastCard(state)
@@ -367,7 +373,7 @@ private fun ToolbarRow(
 
         QuickActionChip(
             label = if (state.aeroCastStreaming) "Casting" else "AeroCast",
-            icon = Icons.Outlined.ScreenShare,
+            icon = Icons.AutoMirrored.Outlined.ScreenShare,
             tint = if (state.aeroCastStreaming) AccentBlue else null,
             enabled = !state.aeroCastStreaming,
             modifier = Modifier.weight(1f),
@@ -510,6 +516,40 @@ private fun ClipboardCard(state: CompanionUiState, onCaptureClipboard: () -> Boo
                 Toast.LENGTH_SHORT
             ).show()
         }
+    }
+}
+
+@Composable
+private fun MacRemoteCard(onOpenRemote: () -> Unit) {
+    val client = remember { MacRemoteClient.shared }
+    val isConnected = client.state == MacRemoteClient.ConnectionState.CONNECTED
+
+    GlassPanel(appearDelayMillis = 130) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                SectionLabel("Mac Remote Control")
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (isConnected) "Connected to ${client.connectedMacName ?: "Mac"}" else "Control mouse, keyboard, media & screen over WAN/LAN",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (isConnected) {
+                LiveBadge(text = "Connected", accent = AccentMint)
+            }
+        }
+
+        HairlineDivider()
+
+        SpatialButton(
+            text = if (isConnected) "Open Remote Trackpad & Screen" else "Connect & Control Mac Remotely",
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onOpenRemote
+        )
     }
 }
 
