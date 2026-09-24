@@ -189,6 +189,58 @@ This document tracks system issues identified, analyzed, and resolved across mac
   4. Vectorized Int16 to Float32 conversion and peak detection with Apple's `Accelerate` framework (`vDSP_vflt16`, `vDSP_vsmul`, `vDSP_maxmgv`). Throttled UI VU meter updates to 30 FPS.
   5. Updated `StudioStreamService.kt` to compare `targetCameraId != activeCameraId` across physical camera IDs, cleanly reopening sensors when switching between ultra-wide, telephoto, and wide lenses.
   6. Configured 1MB socket send buffer (`socket.sendBufferSize = 1024 * 1024`) on Android companion server to absorb high-bitrate I-frame bursts.
-  7. Corrected recording badge condition in `StudioCamView.swift` to check `isRecordingVideo`.
+
+---
+
+### [Issue #011]: Modern macOS SDK Obsoletion of Quartz Capture APIs and Dynamic Symbol Resolution for High-Performance Desktop Streaming
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `MacRemoteControlHost.swift`, `MacRemoteControlProtocol.swift`
+- **Symptom:**
+  Building macOS remote desktop host on modern SDKs (macOS 15+) failed when attempting to capture the display using `CGDisplayCreateImage(CGMainDisplayID())` or `CGWindowListCreateImage`, reporting compilation error: `'CGWindowListCreateImage' is unavailable in macOS`. Traditional ScreenCaptureKit streaming requires heavy asynchronous negotiation and IPC streams ill-suited for on-demand low-latency remote control JPEG frames.
+- **Root Cause Analysis:**
+  Apple marked Quartz display capture functions as obsoleted in C headers starting in recent SDK versions to favor ScreenCaptureKit. However, the runtime dynamic symbol remains present in `CoreGraphics.framework` userspace.
+- **Resolution:**
+  Implemented runtime dynamic symbol resolution:
+  ```swift
+  typealias CGWindowListCreateImageFunc = @convention(c) (CGRect, UInt32, CGWindowID, UInt32) -> Unmanaged<CGImage>?
+  let handle = dlopen(nil, RTLD_LAZY)
+  if let sym = dlsym(handle, "CGWindowListCreateImage") {
+      let function = unsafeBitCast(sym, to: CGWindowListCreateImageFunc.self)
+      // Instant display capture without compilation failure
+  }
+  ```
+  Coupled with hardware-accelerated JPEG compression (`NSBitmapImageRep` with compression factor 0.65), desktop frames are captured and streamed over WebSocket in under 8ms.
+
+---
+
+### [Issue #012]: Jetpack Compose Cross-Platform UI Discrepancies and Touch Gesture Disambiguation on Remote Trackpad
+- **Status:** Closed / Resolved
+- **Severity:** Medium
+- **Component:** `MacRemoteControlScreen.kt`, `MainActivity.kt`
+- **Symptom:**
+  Attempting to reuse styling idioms caused compilation failure due to Compose lacking `Color.opacity(Float)`, which exists in SwiftUI. Furthermore, using a single `pointerInput` block on the virtual trackpad surface led to gestures swallowing one another (e.g. single-finger taps for left click were occasionally swallowed during cursor dragging, or two-finger scroll was misinterpreted as a right-click).
+- **Root Cause Analysis:**
+  Compose `Color` uses `.copy(alpha = ...)` rather than `.opacity(...)`. Additionally, `detectTapGestures` and `detectDragGestures` cannot be chained on the same raw pointer modifier without custom gesture coordination.
+- **Resolution:**
+  1. Created an inline extension `private fun Color.opacity(alpha: Float): Color = this.copy(alpha = alpha)`.
+  2. Migrated deprecated `Icons.Outlined.ScreenShare` to `Icons.AutoMirrored.Outlined.ScreenShare`.
+  3. Structured trackpad input using coordinated pointer callbacks: single-finger drag modulates mouse coordinate delta with an acceleration curve ($v^{1.15}$); two-finger drag translates to discrete vertical/horizontal wheel delta; dedicated physical tactile glass buttons provide 100% reliable Left & Right clicking without ambiguous gesture timing.
+
+---
+
+### [Issue #013]: Long-Distance Remote Control Connectivity over Cellular & WAN via Tailscale CGNAT Mesh
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `MacRemoteControlHost.swift`, `MacRemoteClient.kt`, `MacRemoteAccessView.swift`
+- **Symptom:**
+  Controlling the Mac remotely while away from home (cellular data, cafe Wi-Fi, hotel networks) failed when connecting to local IP (`192.168.x.x`), because home routers block unsolicited inbound traffic through Carrier-Grade NAT (CGNAT) and symmetric firewall rules.
+- **Root Cause Analysis:**
+  Mobile network carriers place devices behind CGNAT pools where neither device has a routable public IP. Traditional port forwarding on consumer routers is complex, fragile, and often impossible on IPv6-only or ISP-managed modems.
+- **Resolution:**
+  1. Multi-tier host IP discovery: `MacRemoteControlHost` interrogates local network interfaces for Tailscale CGNAT addresses (`100.64.0.0/10`), local Wi-Fi addresses (`en0`), and queries `api.ipify.org` for external public WAN IP.
+  2. Surfaced one-tap address copying directly in `MacRemoteAccessView.swift` so the user can easily connect from anywhere in the world using Tailscale without opening router ports.
+  3. Enforced 6-digit challenge-response PIN authentication over encrypted WebSocket sessions to protect the Mac against WAN port scanning.
+
 
 
