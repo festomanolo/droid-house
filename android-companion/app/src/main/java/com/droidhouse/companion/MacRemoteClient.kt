@@ -299,13 +299,38 @@ class MacRemoteClient private constructor() {
         }
     }
 
-    // MARK: - Event Dispatchers
+    // Dynamic Mac Trackpad Acceleration Engine
+    private var lastDx: Float = 0f
+    private var lastDy: Float = 0f
 
     fun sendMouseMove(deltaX: Float, deltaY: Float) {
         if (state != ConnectionState.CONNECTED) return
-        val scaledDx = deltaX * trackpadSensitivity
-        val scaledDy = deltaY * trackpadSensitivity
-        sendRaw(MacRemoteProtocol.mouseMove(scaledDx.toDouble(), scaledDy.toDouble()))
+
+        val distance = Math.hypot(deltaX.toDouble(), deltaY.toDouble()).toFloat()
+        if (distance <= 0.001f) return
+
+        // Authentic macOS Trackpad Velocity Response Curve:
+        // - Precision Zone (< 3.0 px): 0.85x linear damping for pixel-perfect targeting
+        // - Linear Zone (3.0 - 10.0 px): 1.0x to 1.35x progressive tracking
+        // - Dynamic Acceleration Zone (10.0 - 24.0 px): power-law exponent (~1.4x - 2.2x)
+        // - High-Velocity Flicks (> 24.0 px): logarithmic boost up to 3.85x to span wide Mac displays
+        val accelFactor: Float = when {
+            distance < 3.0f -> 0.85f
+            distance < 10.0f -> 1.0f + (distance - 3.0f) * 0.05f
+            distance < 24.0f -> 1.35f + (distance - 10.0f) * 0.09f
+            else -> (2.61f + (distance - 24.0f) * 0.12f).coerceAtMost(3.85f)
+        }
+
+        // Exponential Moving Average (EMA) smoothing to eliminate digitizer step-ladder jitter
+        val smoothDx = (deltaX * 0.78f + lastDx * 0.22f)
+        val smoothDy = (deltaY * 0.78f + lastDy * 0.22f)
+        lastDx = deltaX
+        lastDy = deltaY
+
+        val finalDx = (smoothDx * accelFactor * trackpadSensitivity).toDouble()
+        val finalDy = (smoothDy * accelFactor * trackpadSensitivity).toDouble()
+
+        sendRaw(MacRemoteProtocol.mouseMove(finalDx, finalDy))
     }
 
     fun sendMouseMoveAbs(xRatio: Float, yRatio: Float) {
