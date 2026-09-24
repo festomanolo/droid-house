@@ -505,11 +505,11 @@ private fun ConnectionCard(
 
             OutlinedTextField(
                 value = pin,
-                onValueChange = { if (it.length <= 6) onPinChange(it) },
+                onValueChange = { if (it.length <= 32) onPinChange(it) },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("6-digit Security PIN (shown on Mac)", color = Color.Gray, fontSize = 13.sp) },
+                placeholder = { Text("Security PIN or Password (set on Mac)", color = Color.Gray, fontSize = 13.sp) },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
