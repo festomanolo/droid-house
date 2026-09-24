@@ -44,7 +44,10 @@ public final class MacRemoteControlHost: ObservableObject {
     private var listener: NWListener?
     private var activeConnection: NWConnection?
     private var screenStreamTimer: Timer?
+    private var cursorMonitorTimer: Timer?
     private var permissionPollTimer: Timer?
+    private var lastSentCursorPos: CGPoint = .zero
+    private var isMouseDownState: Bool = false
     private let jsonDecoder = JSONDecoder()
     private let jsonEncoder = JSONEncoder()
 
@@ -62,6 +65,7 @@ public final class MacRemoteControlHost: ObservableObject {
 
     deinit {
         screenStreamTimer?.invalidate()
+        cursorMonitorTimer?.invalidate()
         permissionPollTimer?.invalidate()
         listener?.cancel()
         activeConnection?.cancel()
@@ -122,6 +126,7 @@ public final class MacRemoteControlHost: ObservableObject {
 
     public func stopServer() {
         stopScreenStreaming()
+        stopCursorMonitoring()
         activeConnection?.cancel()
         activeConnection = nil
         listener?.cancel()
@@ -177,6 +182,7 @@ public final class MacRemoteControlHost: ObservableObject {
 
     private func handleClientDisconnect() {
         stopScreenStreaming()
+        stopCursorMonitoring()
         activeConnection = nil
         DispatchQueue.main.async {
             self.connectedClientName = nil
@@ -253,6 +259,8 @@ public final class MacRemoteControlHost: ObservableObject {
                         screenCaptureGranted: isScreenCaptureGranted
                     )
                     sendMessage(response)
+                    self.startCursorMonitoring()
+                    self.broadcastCurrentCursor(force: true)
                 } else {
                     logEvent("Authentication failed: Invalid PIN '\(envelope.pin ?? "")'")
                     let failResponse = MacRemoteProtocol.OutboundEnvelope(
@@ -389,13 +397,15 @@ public final class MacRemoteControlHost: ObservableObject {
         currentLoc.x = min(max(currentLoc.x + dx, screenBounds.minX), screenBounds.maxX - 1)
         currentLoc.y = min(max(currentLoc.y + dy, screenBounds.minY), screenBounds.maxY - 1)
 
+        let moveType: CGEventType = isMouseDownState ? .leftMouseDragged : .mouseMoved
         let moveEvent = CGEvent(
             mouseEventSource: nil,
-            mouseType: .mouseMoved,
+            mouseType: moveType,
             mouseCursorPosition: currentLoc,
             mouseButton: .left
         )
         moveEvent?.post(tap: .cghidEventTap)
+        broadcastCurrentCursor(force: true)
     }
 
     public func synthesizeMouseMoveAbs(xRatio: CGFloat, yRatio: CGFloat) {
@@ -406,13 +416,15 @@ public final class MacRemoteControlHost: ObservableObject {
         let targetY = screenBounds.minY + (screenBounds.height * min(max(yRatio, 0.0), 1.0))
         let targetPoint = CGPoint(x: targetX, y: targetY)
 
+        let moveType: CGEventType = isMouseDownState ? .leftMouseDragged : .mouseMoved
         let moveEvent = CGEvent(
             mouseEventSource: nil,
-            mouseType: .mouseMoved,
+            mouseType: moveType,
             mouseCursorPosition: targetPoint,
             mouseButton: .left
         )
         moveEvent?.post(tap: .cghidEventTap)
+        broadcastCurrentCursor(force: true)
     }
 
     public func synthesizeMouseClick(button: MacRemoteProtocol.MouseButton) {
@@ -444,6 +456,7 @@ public final class MacRemoteControlHost: ObservableObject {
         downEvent?.post(tap: .cghidEventTap)
         usleep(15_000) // 15ms click duration
         upEvent?.post(tap: .cghidEventTap)
+        broadcastCurrentCursor(force: true)
     }
 
     public func synthesizeMouseDoubleClick() {
@@ -461,24 +474,29 @@ public final class MacRemoteControlHost: ObservableObject {
             up?.post(tap: .cghidEventTap)
             if click == 1 { usleep(30_000) }
         }
+        broadcastCurrentCursor(force: true)
     }
 
     public func synthesizeMouseDown(button: MacRemoteProtocol.MouseButton) {
         guard let currentEvent = CGEvent(source: nil) else { return }
         let currentLoc = currentEvent.location
 
+        if button == .left { isMouseDownState = true }
         let (type, cgButton) = button == .right ? (CGEventType.rightMouseDown, CGMouseButton.right) : (CGEventType.leftMouseDown, CGMouseButton.left)
         let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: currentLoc, mouseButton: cgButton)
         event?.post(tap: .cghidEventTap)
+        broadcastCurrentCursor(force: true)
     }
 
     public func synthesizeMouseUp(button: MacRemoteProtocol.MouseButton) {
         guard let currentEvent = CGEvent(source: nil) else { return }
         let currentLoc = currentEvent.location
 
+        if button == .left { isMouseDownState = false }
         let (type, cgButton) = button == .right ? (CGEventType.rightMouseUp, CGMouseButton.right) : (CGEventType.leftMouseUp, CGMouseButton.left)
         let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: currentLoc, mouseButton: cgButton)
         event?.post(tap: .cghidEventTap)
+        broadcastCurrentCursor(force: true)
     }
 
     public func synthesizeScroll(dx: CGFloat, dy: CGFloat) {
@@ -555,6 +573,15 @@ public final class MacRemoteControlHost: ObservableObject {
             pressSingleKey(keyCode: 123)
         case .arrowRight:
             pressSingleKey(keyCode: 124)
+        case .forceQuit:
+            // Cmd + Option + Esc (Force Quit Applications)
+            pressKeyWithFlags(keyCode: 53, flags: [.maskCommand, .maskAlternate])
+        case .closeWindow:
+            // Cmd + W
+            pressKeyWithFlags(keyCode: 13, flags: .maskCommand)
+        case .quitApp:
+            // Cmd + Q
+            pressKeyWithFlags(keyCode: 12, flags: .maskCommand)
         }
     }
 
@@ -664,6 +691,51 @@ public final class MacRemoteControlHost: ObservableObject {
         }
     }
 
+    // MARK: - Real-Time Cursor Tracking & Broadcasting
+
+    private func startCursorMonitoring() {
+        DispatchQueue.main.async {
+            self.cursorMonitorTimer?.invalidate()
+            // 60 Hz polling loop for instantaneous mouse tracking
+            self.cursorMonitorTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+                self?.broadcastCurrentCursor(force: false)
+            }
+        }
+    }
+
+    private func stopCursorMonitoring() {
+        DispatchQueue.main.async {
+            self.cursorMonitorTimer?.invalidate()
+            self.cursorMonitorTimer = nil
+            self.isMouseDownState = false
+        }
+    }
+
+    public func broadcastCurrentCursor(force: Bool = false) {
+        guard isClientAuthenticated, activeConnection != nil else { return }
+        guard let mouseEvent = CGEvent(source: nil) else { return }
+        let loc = mouseEvent.location
+        let screenBounds = CGDisplayBounds(CGMainDisplayID())
+
+        if !force {
+            if abs(loc.x - lastSentCursorPos.x) < 0.5 && abs(loc.y - lastSentCursorPos.y) < 0.5 {
+                return
+            }
+        }
+
+        lastSentCursorPos = loc
+        let normX = max(0.0, min(1.0, Double(loc.x - screenBounds.minX) / Double(screenBounds.width)))
+        let normY = max(0.0, min(1.0, Double(loc.y - screenBounds.minY) / Double(screenBounds.height)))
+
+        let envelope = MacRemoteProtocol.OutboundEnvelope(
+            type: "cursor_pos",
+            cursorX: normX,
+            cursorY: normY,
+            cursorDown: isMouseDownState
+        )
+        sendMessage(envelope)
+    }
+
     // MARK: - Live Screen Capture & Streaming
 
     public func startScreenStreaming() {
@@ -707,32 +779,102 @@ public final class MacRemoteControlHost: ObservableObject {
             let targetWidth = max(320, Int(Double(width) * scale))
             let targetHeight = max(240, Int(Double(height) * scale))
 
-            let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
+            // Obtain live cursor position on the display
+            let mainDisplay = CGMainDisplayID()
+            let screenBounds = CGDisplayBounds(mainDisplay)
+            let mouseLoc = CGEvent(source: nil)?.location ?? CGPoint(x: screenBounds.midX, y: screenBounds.midY)
+            let normX = max(0.0, min(1.0, Double(mouseLoc.x - screenBounds.minX) / Double(screenBounds.width)))
+            let normY = max(0.0, min(1.0, Double(mouseLoc.y - screenBounds.minY) / Double(screenBounds.height)))
+
+            // Render scaled image with cursor drawn into bitmap context
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+            guard let context = CGContext(
+                data: nil,
+                width: targetWidth,
+                height: targetHeight,
+                bitsPerComponent: 8,
+                bytesPerRow: targetWidth * 4,
+                space: colorSpace,
+                bitmapInfo: bitmapInfo
+            ) else { return }
+
+            context.interpolationQuality = .medium
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+
+            // Draw crisp macOS cursor directly onto the frame
+            let drawX = CGFloat(normX) * CGFloat(targetWidth)
+            let drawY = CGFloat(1.0 - normY) * CGFloat(targetHeight) // CoreGraphics y-axis is inverted
+            self.drawMacCursor(in: context, at: CGPoint(x: drawX, y: drawY), scale: CGFloat(scale))
+
+            guard let finalCGImage = context.makeImage() else { return }
+            let bitmapRep = NSBitmapImageRep(cgImage: finalCGImage)
             let properties: [NSBitmapImageRep.PropertyKey: Any] = [
                 .compressionFactor: NSNumber(value: quality)
             ]
 
             guard let jpegData = bitmapRep.representation(using: .jpeg, properties: properties) else { return }
 
-            // Construct 12-byte header:
+            // Construct 16-byte header:
             // [0..3]: Magic 0x44485343 ('DHSC')
             // [4..5]: Width UInt16 big endian
             // [6..7]: Height UInt16 big endian
             // [8..11]: Timestamp UInt32 milliseconds big endian
-            var packet = Data(capacity: 12 + jpegData.count)
+            // [12..13]: CursorX UInt16 (normalized ratio * 65535) big endian
+            // [14..15]: CursorY UInt16 (normalized ratio * 65535) big endian
+            var packet = Data(capacity: 16 + jpegData.count)
             var magic = MacRemoteProtocol.screenHeaderMagic.bigEndian
             var w = UInt16(targetWidth).bigEndian
             var h = UInt16(targetHeight).bigEndian
             var ts = UInt32(UInt64(Date().timeIntervalSince1970 * 1000) & 0xFFFFFFFF).bigEndian
+            var curX = UInt16(min(65535.0, max(0.0, normX * 65535.0))).bigEndian
+            var curY = UInt16(min(65535.0, max(0.0, normY * 65535.0))).bigEndian
 
             packet.append(Data(bytes: &magic, count: 4))
             packet.append(Data(bytes: &w, count: 2))
             packet.append(Data(bytes: &h, count: 2))
             packet.append(Data(bytes: &ts, count: 4))
+            packet.append(Data(bytes: &curX, count: 2))
+            packet.append(Data(bytes: &curY, count: 2))
             packet.append(jpegData)
 
             self.sendBinaryData(packet)
         }
+    }
+
+    private func drawMacCursor(in context: CGContext, at point: CGPoint, scale: CGFloat) {
+        context.saveGState()
+
+        let s: CGFloat = max(18.0, 24.0 * scale)
+
+        // Drop shadow for pointer
+        context.setShadow(offset: CGSize(width: 1.5, height: -2.0), blur: 3.5, color: CGColor(gray: 0, alpha: 0.55))
+
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: point.x, y: point.y))
+        path.addLine(to: CGPoint(x: point.x, y: point.y - s * 0.85))
+        path.addLine(to: CGPoint(x: point.x + s * 0.22, y: point.y - s * 0.65))
+        path.addLine(to: CGPoint(x: point.x + s * 0.42, y: point.y - s * 1.0))
+        path.addLine(to: CGPoint(x: point.x + s * 0.58, y: point.y - s * 0.92))
+        path.addLine(to: CGPoint(x: point.x + s * 0.38, y: point.y - s * 0.58))
+        path.addLine(to: CGPoint(x: point.x + s * 0.68, y: point.y - s * 0.58))
+        path.closeSubpath()
+
+        // White arrow fill
+        context.setFillColor(CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0))
+        context.addPath(path)
+        context.fillPath()
+
+        // Crisp black border
+        context.setShadow(offset: .zero, blur: 0, color: nil)
+        context.setStrokeColor(CGColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0))
+        context.setLineWidth(1.6)
+        context.setLineJoin(.round)
+        context.setLineCap(.round)
+        context.addPath(path)
+        context.strokePath()
+
+        context.restoreGState()
     }
 
     private func captureDesktopCGImage() -> CGImage? {
@@ -840,6 +982,19 @@ public final class MacRemoteControlHost: ObservableObject {
             self.pairingPin = pin
             self.logEvent("New pairing PIN generated: \(pin)")
         }
+    }
+
+    public func setCustomPin(_ newPin: String) -> Bool {
+        let trimmed = newPin.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 6, CharacterSet.decimalDigits.isSuperset(of: CharacterSet(charactersIn: trimmed)) else {
+            return false
+        }
+        UserDefaults.standard.set(trimmed, forKey: "droidhouse_mac_remote_pin")
+        DispatchQueue.main.async {
+            self.pairingPin = trimmed
+            self.logEvent("Permanent PIN updated: \(trimmed)")
+        }
+        return true
     }
 
     private func loadOrGeneratePin() {
