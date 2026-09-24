@@ -95,9 +95,23 @@ class MacRemoteClient private constructor() {
     // Trackpad sensitivity factor (0.5 to 2.5)
     var trackpadSensitivity: Float = 1.25f
 
+    // Live Real-Time Cursor Tracking
+    @Volatile
+    var cursorXRatio: Float = 0.5f
+        private set
+
+    @Volatile
+    var cursorYRatio: Float = 0.5f
+        private set
+
+    @Volatile
+    var isCursorDown: Boolean = false
+        private set
+
     // Listeners
     var onStateChanged: ((ConnectionState, String) -> Unit)? = null
     var onFrameReceived: ((Bitmap) -> Unit)? = null
+    var onCursorMoved: ((Float, Float, Boolean) -> Unit)? = null
 
     // Preferences
     fun getSavedHost(context: Context): String {
@@ -227,6 +241,17 @@ class MacRemoteClient private constructor() {
                         ws.send(MacRemoteProtocol.pongRtt(env.pingId))
                     }
                 }
+
+                "cursor_pos" -> {
+                    val cx = env.cursorX?.toFloat()
+                    val cy = env.cursorY?.toFloat()
+                    if (cx != null && cy != null) {
+                        cursorXRatio = cx.coerceIn(0f, 1f)
+                        cursorYRatio = cy.coerceIn(0f, 1f)
+                        isCursorDown = env.cursorDown == true
+                        onCursorMoved?.invoke(cursorXRatio, cursorYRatio, isCursorDown)
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse inbound text envelope: ${e.localizedMessage}")
@@ -244,7 +269,15 @@ class MacRemoteClient private constructor() {
         val height = byteBuffer.short.toInt() and 0xFFFF
         val timestamp = byteBuffer.int
 
-        val payloadOffset = 12
+        var payloadOffset = 12
+        if (byteBuffer.remaining() >= 4) {
+            val rawCurX = byteBuffer.short.toInt() and 0xFFFF
+            val rawCurY = byteBuffer.short.toInt() and 0xFFFF
+            cursorXRatio = (rawCurX.toFloat() / 65535f).coerceIn(0f, 1f)
+            cursorYRatio = (rawCurY.toFloat() / 65535f).coerceIn(0f, 1f)
+            payloadOffset = 16
+            onCursorMoved?.invoke(cursorXRatio, cursorYRatio, isCursorDown)
+        }
         val payloadLength = bytes.size - payloadOffset
 
         val byteArray = bytes.toByteArray()
@@ -277,6 +310,9 @@ class MacRemoteClient private constructor() {
 
     fun sendMouseMoveAbs(xRatio: Float, yRatio: Float) {
         if (state != ConnectionState.CONNECTED) return
+        cursorXRatio = xRatio.coerceIn(0f, 1f)
+        cursorYRatio = yRatio.coerceIn(0f, 1f)
+        onCursorMoved?.invoke(cursorXRatio, cursorYRatio, isCursorDown)
         sendRaw(MacRemoteProtocol.mouseMoveAbs(xRatio.toDouble(), yRatio.toDouble()))
     }
 
