@@ -10,9 +10,9 @@ import AppKit
 struct MacRemoteAccessView: View {
     @ObservedObject var host: MacRemoteControlHost = MacRemoteControlHost.shared
     @State private var copiedItem: String?
-    @State private var isEditingPin = false
     @State private var customPinInput = ""
     @State private var pinErrorMessage: String? = nil
+    @State private var showSavedSuccess = false
 
     var body: some View {
         ScrollView {
@@ -29,6 +29,7 @@ struct MacRemoteAccessView: View {
         }
         .background(Color.black.opacity(0.4))
         .onAppear {
+            customPinInput = host.pairingPin
             host.refreshNetworkAddresses()
             host.checkPermissions()
             if !host.isRunning {
@@ -226,12 +227,12 @@ struct MacRemoteAccessView: View {
 
             Divider().padding(.vertical, 4)
 
-            // Security PIN Section (Permanent Password)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 16) {
+            // Security PIN & Password Section (Directly Editable Permanent Access)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text("Permanent Security PIN")
+                            Text("Security PIN / Password")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.white)
                             Text("Permanent")
@@ -242,80 +243,91 @@ struct MacRemoteAccessView: View {
                                 .foregroundStyle(Color.green)
                         }
 
-                        Text("Saved permanently in macOS settings. Never changes unless you edit it.")
+                        Text("Set your own custom password or PIN (4–32 characters). Persisted permanently in macOS settings.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
-
-                    HStack(spacing: 8) {
-                        Text(host.pairingPin)
-                            .font(.system(size: 22, weight: .bold, design: .monospaced))
-                            .tracking(3)
-                            .foregroundStyle(Color.dhAccentMint)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.black.opacity(0.6))
-                                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.dhAccentMint.opacity(0.4), lineWidth: 1))
-                            )
-
-                        Button {
-                            copyToClipboard(host.pairingPin, label: "PIN")
-                        } label: {
-                            Image(systemName: copiedItem == "PIN" ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 12))
-                        }
-                        .buttonStyle(.bordered)
-                        .help("Copy PIN to clipboard")
-
-                        Button {
-                            customPinInput = host.pairingPin
-                            isEditingPin.toggle()
-                        } label: {
-                            Label(isEditingPin ? "Cancel" : "Change PIN", systemImage: "pencil")
-                                .font(.system(size: 11))
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button {
-                            host.regeneratePin()
-                        } label: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 12))
-                        }
-                        .buttonStyle(.bordered)
-                        .help("Generate new random 6-digit PIN")
-                    }
                 }
 
-                if isEditingPin {
-                    HStack(spacing: 10) {
-                        TextField("Enter 6-digit PIN", text: $customPinInput)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 13, design: .monospaced))
-                            .frame(width: 140)
+                // Interactive Editable PIN / Password Field
+                HStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "key.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.dhAccentMint)
 
-                        Button("Save Permanent PIN") {
-                            if host.setCustomPin(customPinInput) {
-                                isEditingPin = false
-                                pinErrorMessage = nil
+                        TextField("Enter PIN or Password", text: $customPinInput)
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.white)
+                            .textFieldStyle(.plain)
+                            .onSubmit {
+                                savePin()
+                            }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.black.opacity(0.65))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(customPinInput != host.pairingPin ? Color.blue.opacity(0.8) : Color.white.opacity(0.15), lineWidth: 1.5)
+                            )
+                    )
+
+                    Button {
+                        savePin()
+                    } label: {
+                        HStack(spacing: 4) {
+                            if showSavedSuccess {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.green)
+                                Text("Saved")
+                                    .foregroundStyle(.green)
                             } else {
-                                pinErrorMessage = "PIN must be exactly 6 digits (0-9)."
+                                Text("Save PIN")
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-
-                        if let err = pinErrorMessage {
-                            Text(err)
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color.red)
-                        }
+                        .font(.system(size: 12, weight: .semibold))
                     }
-                    .padding(.top, 4)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .disabled(customPinInput.trimmingCharacters(in: .whitespacesAndNewlines).count < 4)
+
+                    Button {
+                        copyToClipboard(host.pairingPin, label: "PIN")
+                    } label: {
+                        Image(systemName: copiedItem == "PIN" ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Copy current PIN to clipboard")
+
+                    Button {
+                        host.regeneratePin()
+                        customPinInput = host.pairingPin
+                        showSavedSuccess = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            showSavedSuccess = false
+                        }
+                    } label: {
+                        Label("Randomize", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Generate new random 6-digit PIN")
+                }
+
+                if let err = pinErrorMessage {
+                    Text(err)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.red)
+                } else if showSavedSuccess {
+                    Text("✓ Saved permanently in macOS settings. Use this exact PIN/password in your Android app.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.green)
                 }
             }
         }
@@ -628,6 +640,19 @@ struct MacRemoteAccessView: View {
             if copiedItem == label {
                 withAnimation { copiedItem = nil }
             }
+        }
+    }
+
+    private func savePin() {
+        let trimmed = customPinInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if host.setCustomPin(trimmed) {
+            pinErrorMessage = nil
+            showSavedSuccess = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                showSavedSuccess = false
+            }
+        } else {
+            pinErrorMessage = "PIN or Password must be between 4 and 32 characters."
         }
     }
 }
