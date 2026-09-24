@@ -10,6 +10,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,9 +19,15 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,13 +57,23 @@ import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -108,11 +125,18 @@ import kotlinx.coroutines.delay
 
 private fun Color.opacity(alpha: Float): Color = this.copy(alpha = alpha)
 
+// MARK: - Dual Mouse Input Modes (Chrome Remote Desktop interaction model)
+enum class MouseInputMode {
+    TRACKPAD,     // Relative swipe, tap = click, 2-finger scroll, follows cursor
+    DIRECT_TOUCH  // Direct tap & drag at exact screen coordinates
+}
+
 // MARK: - Mac Remote Control Screen (Jetpack Compose)
 //
 // Full-screen spatial companion interface for controlling macOS remotely over
 // WAN (Tailscale/Internet) or local Wi-Fi. Features a fluid trackpad, live desktop
-// streaming, system power and media controls, and virtual Mac keyboard typing.
+// streaming with Chrome Remote Desktop features (zoom pads, full-screen, dual mouse modes),
+// system power and media controls, and virtual Mac keyboard typing.
 
 @Composable
 fun MacRemoteControlScreen(
@@ -131,10 +155,20 @@ fun MacRemoteControlScreen(
     var latencyMs by remember { mutableLongStateOf(client.rttLatencyMs) }
     var latestFrame by remember { mutableStateOf<Bitmap?>(null) }
 
+    var cursorX by remember { mutableFloatStateOf(client.cursorXRatio) }
+    var cursorY by remember { mutableFloatStateOf(client.cursorYRatio) }
+    var isCursorDown by remember { mutableStateOf(client.isCursorDown) }
+
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Trackpad, 1: Live Desktop, 2: Media & System
     var showKeyboardInput by remember { mutableStateOf(false) }
     var textInputState by remember { mutableStateOf("") }
     var showConfigPanel by remember { mutableStateOf(false) }
+
+    // Chrome Remote Desktop Feature States
+    var isFullscreen by remember { mutableStateOf(false) }
+    var mouseMode by remember { mutableStateOf(MouseInputMode.TRACKPAD) }
+    var zoomScale by remember { mutableFloatStateOf(1.0f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
 
     val auroraPhase = rememberAuroraPhase()
 
@@ -153,11 +187,20 @@ fun MacRemoteControlScreen(
             latestFrame = bitmap
         }
 
+        client.onCursorMoved = { x, y, down ->
+            cursorX = x
+            cursorY = y
+            isCursorDown = down
+        }
+
         while (true) {
             connectionState = client.state
             statusMessage = client.statusMessage
             macName = client.connectedMacName
             latencyMs = client.rttLatencyMs
+            cursorX = client.cursorXRatio
+            cursorY = client.cursorYRatio
+            isCursorDown = client.isCursorDown
             delay(1000)
         }
     }
@@ -179,57 +222,75 @@ fun MacRemoteControlScreen(
         AuroraBackground(phase = auroraPhase, intensity = if (connectionState == MacRemoteClient.ConnectionState.CONNECTED) 0.8f else 0.4f)
 
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.systemBars)
+            modifier = if (isFullscreen) {
+                Modifier.fillMaxSize()
+            } else {
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.systemBars)
+            }
         ) {
-            // Top App Bar
-            TopBar(
-                macName = macName,
-                connectionState = connectionState,
-                latencyMs = latencyMs,
-                onNavigateBack = onNavigateBack,
-                onToggleSettings = { showConfigPanel = !showConfigPanel }
-            )
-
-            // Connection Settings Panel (Collapsible)
-            AnimatedVisibility(
-                visible = showConfigPanel || connectionState != MacRemoteClient.ConnectionState.CONNECTED,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                ConnectionCard(
-                    host = hostText,
-                    port = portText,
-                    pin = pinText,
+            if (!isFullscreen) {
+                // Top App Bar
+                TopBar(
+                    macName = macName,
                     connectionState = connectionState,
-                    statusMessage = statusMessage,
-                    onHostChange = { hostText = it },
-                    onPortChange = { portText = it },
-                    onPinChange = { pinText = it },
-                    onConnect = {
-                        val p = portText.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
-                        client.saveConnectionDetails(context, hostText, p, pinText)
-                        client.connect(hostText, p, pinText)
-                    },
-                    onDisconnect = {
-                        client.disconnect()
+                    latencyMs = latencyMs,
+                    onNavigateBack = onNavigateBack,
+                    onToggleSettings = { showConfigPanel = !showConfigPanel }
+                )
+
+                // Connection Settings Panel (Collapsible)
+                AnimatedVisibility(
+                    visible = showConfigPanel || connectionState != MacRemoteClient.ConnectionState.CONNECTED,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    ConnectionCard(
+                        host = hostText,
+                        port = portText,
+                        pin = pinText,
+                        connectionState = connectionState,
+                        statusMessage = statusMessage,
+                        onHostChange = {
+                            hostText = it
+                            val p = portText.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
+                            client.saveConnectionDetails(context, it, p, pinText)
+                        },
+                        onPortChange = {
+                            portText = it
+                            val p = it.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
+                            client.saveConnectionDetails(context, hostText, p, pinText)
+                        },
+                        onPinChange = {
+                            pinText = it
+                            val p = portText.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
+                            client.saveConnectionDetails(context, hostText, p, it)
+                        },
+                        onConnect = {
+                            val p = portText.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
+                            client.saveConnectionDetails(context, hostText, p, pinText)
+                            client.connect(hostText, p, pinText)
+                        },
+                        onDisconnect = {
+                            client.disconnect()
+                        }
+                    )
+                }
+
+                // Mode Tabs (Trackpad / Desktop Stream / Media & System)
+                ModeTabs(
+                    selectedTab = selectedTab,
+                    onSelectTab = { newTab ->
+                        selectedTab = newTab
+                        if (newTab == 1 && connectionState == MacRemoteClient.ConnectionState.CONNECTED) {
+                            client.setScreenStreaming(true)
+                        } else if (newTab != 1 && client.isScreenStreaming) {
+                            client.setScreenStreaming(false)
+                        }
                     }
                 )
             }
-
-            // Mode Tabs (Trackpad / Desktop Stream / Media & System)
-            ModeTabs(
-                selectedTab = selectedTab,
-                onSelectTab = { newTab ->
-                    selectedTab = newTab
-                    if (newTab == 1 && connectionState == MacRemoteClient.ConnectionState.CONNECTED) {
-                        client.setScreenStreaming(true)
-                    } else if (newTab != 1 && client.isScreenStreaming) {
-                        client.setScreenStreaming(false)
-                    }
-                }
-            )
 
             // Virtual Keyboard Drawer (if toggled)
             AnimatedVisibility(visible = showKeyboardInput) {
@@ -257,12 +318,34 @@ fun MacRemoteControlScreen(
                     0 -> TrackpadPane(
                         client = client,
                         isConnected = connectionState == MacRemoteClient.ConnectionState.CONNECTED,
+                        cursorX = cursorX,
+                        cursorY = cursorY,
                         onToggleKeyboard = { showKeyboardInput = !showKeyboardInput }
                     )
                     1 -> LiveDesktopPane(
                         client = client,
                         frame = latestFrame,
-                        isConnected = connectionState == MacRemoteClient.ConnectionState.CONNECTED
+                        isConnected = connectionState == MacRemoteClient.ConnectionState.CONNECTED,
+                        cursorX = cursorX,
+                        cursorY = cursorY,
+                        isCursorDown = isCursorDown,
+                        mouseMode = mouseMode,
+                        onToggleMouseMode = {
+                            mouseMode = if (mouseMode == MouseInputMode.TRACKPAD) MouseInputMode.DIRECT_TOUCH else MouseInputMode.TRACKPAD
+                        },
+                        zoomScale = zoomScale,
+                        onZoomChange = { zoomScale = it },
+                        panOffset = panOffset,
+                        onPanChange = { panOffset = it },
+                        isFullscreen = isFullscreen,
+                        onToggleFullscreen = {
+                            isFullscreen = !isFullscreen
+                            if (isFullscreen) {
+                                selectedTab = 1
+                            }
+                        },
+                        showKeyboard = showKeyboardInput,
+                        onToggleKeyboard = { showKeyboardInput = !showKeyboardInput }
                     )
                     2 -> SystemMediaPane(
                         client = client,
@@ -518,6 +601,8 @@ private fun ModeTabs(
 private fun TrackpadPane(
     client: MacRemoteClient,
     isConnected: Boolean,
+    cursorX: Float,
+    cursorY: Float,
     onToggleKeyboard: () -> Unit
 ) {
     val context = LocalContext.current
@@ -581,17 +666,61 @@ private fun TrackpadPane(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (isConnected) "Multi-Touch Glass Trackpad" else "Connect to Mac to enable trackpad",
-                        style = MaterialTheme.typography.bodySmall.copy(color = Color.White.opacity(0.4f))
-                    )
-
-                    IconButton(onClick = onToggleKeyboard) {
-                        Icon(
-                            imageVector = Icons.Default.Keyboard,
-                            contentDescription = "Keyboard",
-                            tint = Color.White.opacity(0.7f)
+                    Column {
+                        Text(
+                            text = if (isConnected) "Multi-Touch Glass Trackpad" else "Connect to Mac to enable trackpad",
+                            style = MaterialTheme.typography.bodySmall.copy(color = Color.White.opacity(0.4f))
                         )
+                        if (isConnected) {
+                            Text(
+                                text = "Cursor: X: ${(cursorX * 100).toInt()}% • Y: ${(cursorY * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = Color(0xFF38BDF8),
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp
+                                )
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (isConnected) {
+                            // Mini Screen Radar View
+                            Box(
+                                modifier = Modifier
+                                    .width(48.dp)
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color.Black.opacity(0.6f))
+                                    .border(1.dp, Color(0xFF38BDF8).opacity(0.4f), RoundedCornerShape(4.dp))
+                            ) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val dotX = cursorX * size.width
+                                    val dotY = cursorY * size.height
+                                    drawCircle(
+                                        color = Color(0xFF38BDF8).copy(alpha = 0.4f),
+                                        radius = 4.dp.toPx(),
+                                        center = Offset(dotX, dotY)
+                                    )
+                                    drawCircle(
+                                        color = Color.White,
+                                        radius = 2.dp.toPx(),
+                                        center = Offset(dotX, dotY)
+                                    )
+                                }
+                            }
+                        }
+
+                        IconButton(onClick = onToggleKeyboard) {
+                            Icon(
+                                imageVector = Icons.Default.Keyboard,
+                                contentDescription = "Keyboard",
+                                tint = Color.White.opacity(0.7f)
+                            )
+                        }
                     }
                 }
 
@@ -666,42 +795,269 @@ private fun TrackpadPane(
     }
 }
 
-// MARK: - Live Desktop Pane
+// MARK: - Live Desktop Pane (Chrome Remote Desktop Experience)
 
 @Composable
 private fun LiveDesktopPane(
     client: MacRemoteClient,
     frame: Bitmap?,
-    isConnected: Boolean
+    isConnected: Boolean,
+    cursorX: Float,
+    cursorY: Float,
+    isCursorDown: Boolean,
+    mouseMode: MouseInputMode,
+    onToggleMouseMode: () -> Unit,
+    zoomScale: Float,
+    onZoomChange: (Float) -> Unit,
+    panOffset: Offset,
+    onPanChange: (Offset) -> Unit,
+    isFullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
+    showKeyboard: Boolean,
+    onToggleKeyboard: () -> Unit
 ) {
     val context = LocalContext.current
+    var isCrdToolsExpanded by remember { mutableStateOf(false) }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .padding(8.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.Black)
-            .border(1.dp, Color.White.opacity(0.1f), RoundedCornerShape(16.dp)),
+            .then(
+                if (!isFullscreen) {
+                    Modifier
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, Color.White.opacity(0.1f), RoundedCornerShape(16.dp))
+                } else {
+                    Modifier
+                }
+            )
+            .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
+        val boxWidth = constraints.maxWidth.toFloat()
+        val boxHeight = constraints.maxHeight.toFloat()
+
         if (frame != null && isConnected) {
-            Image(
-                bitmap = frame.asImageBitmap(),
-                contentDescription = "Mac Live Screen",
+            val frameW = frame.width.toFloat()
+            val frameH = frame.height.toFloat()
+
+            // Calculate precise aspect fit scaling and letterbox offsets
+            val fitScale = minOf(boxWidth / frameW, boxHeight / frameH)
+            val displayW = frameW * fitScale * zoomScale
+            val displayH = frameH * fitScale * zoomScale
+
+            val maxPanX = ((displayW - boxWidth) / 2f).coerceAtLeast(0f)
+            val maxPanY = ((displayH - boxHeight) / 2f).coerceAtLeast(0f)
+
+            val effectivePanX = panOffset.x.coerceIn(-maxPanX, maxPanX)
+            val effectivePanY = panOffset.y.coerceIn(-maxPanY, maxPanY)
+
+            val originX = (boxWidth - displayW) / 2f + effectivePanX
+            val originY = (boxHeight - displayH) / 2f + effectivePanY
+
+            val cursorPxX = originX + (cursorX * displayW)
+            val cursorPxY = originY + (cursorY * displayH)
+
+            // Auto-follow cursor when zoomed in Trackpad mode
+            LaunchedEffect(cursorX, cursorY, zoomScale, mouseMode) {
+                if (zoomScale > 1.0f && mouseMode == MouseInputMode.TRACKPAD) {
+                    val margin = 80f
+                    var curPanX = panOffset.x
+                    var curPanY = panOffset.y
+                    if (cursorPxX < margin) {
+                        curPanX += (margin - cursorPxX)
+                    } else if (cursorPxX > boxWidth - margin) {
+                        curPanX -= (cursorPxX - (boxWidth - margin))
+                    }
+                    if (cursorPxY < margin) {
+                        curPanY += (margin - cursorPxY)
+                    } else if (cursorPxY > boxHeight - margin) {
+                        curPanY -= (cursorPxY - (boxHeight - margin))
+                    }
+                    val cX = curPanX.coerceIn(-maxPanX, maxPanX)
+                    val cY = curPanY.coerceIn(-maxPanY, maxPanY)
+                    if (cX != panOffset.x || cY != panOffset.y) {
+                        onPanChange(Offset(cX, cY))
+                    }
+                }
+            }
+
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            val xRatio = (offset.x / size.width).coerceIn(0f, 1f)
-                            val yRatio = (offset.y / size.height).coerceIn(0f, 1f)
-                            triggerHaptic(context)
-                            client.sendMouseMoveAbs(xRatio, yRatio)
-                            client.sendMouseClick("left")
+                    .clipToBounds()
+                    .pointerInput(mouseMode, zoomScale, originX, originY, displayW, displayH) {
+                        if (mouseMode == MouseInputMode.DIRECT_TOUCH) {
+                            detectTapGestures(
+                                onTap = { offset ->
+                                    val clickXRatio = ((offset.x - originX) / displayW).coerceIn(0f, 1f)
+                                    val clickYRatio = ((offset.y - originY) / displayH).coerceIn(0f, 1f)
+                                    triggerHaptic(context)
+                                    client.sendMouseMoveAbs(clickXRatio, clickYRatio)
+                                    client.sendMouseClick("left")
+                                },
+                                onDoubleTap = { offset ->
+                                    val clickXRatio = ((offset.x - originX) / displayW).coerceIn(0f, 1f)
+                                    val clickYRatio = ((offset.y - originY) / displayH).coerceIn(0f, 1f)
+                                    triggerHaptic(context)
+                                    client.sendMouseMoveAbs(clickXRatio, clickYRatio)
+                                    client.sendMouseDoubleClick()
+                                },
+                                onLongPress = { offset ->
+                                    val clickXRatio = ((offset.x - originX) / displayW).coerceIn(0f, 1f)
+                                    val clickYRatio = ((offset.y - originY) / displayH).coerceIn(0f, 1f)
+                                    triggerHaptic(context)
+                                    client.sendMouseMoveAbs(clickXRatio, clickYRatio)
+                                    client.sendMouseClick("right")
+                                }
+                            )
+                        } else {
+                            detectTapGestures(
+                                onTap = {
+                                    triggerHaptic(context)
+                                    client.sendMouseClick("left")
+                                },
+                                onDoubleTap = {
+                                    triggerHaptic(context)
+                                    client.sendMouseDoubleClick()
+                                },
+                                onLongPress = {
+                                    triggerHaptic(context)
+                                    client.sendMouseClick("right")
+                                }
+                            )
                         }
-                    },
-                contentScale = ContentScale.Fit
-            )
+                    }
+                    .pointerInput(mouseMode, zoomScale, originX, originY, displayW, displayH) {
+                        if (mouseMode == MouseInputMode.DIRECT_TOUCH) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    val clickXRatio = ((offset.x - originX) / displayW).coerceIn(0f, 1f)
+                                    val clickYRatio = ((offset.y - originY) / displayH).coerceIn(0f, 1f)
+                                    client.sendMouseMoveAbs(clickXRatio, clickYRatio)
+                                    client.sendMouseDown("left")
+                                },
+                                onDragEnd = {
+                                    client.sendMouseUp("left")
+                                },
+                                onDragCancel = {
+                                    client.sendMouseUp("left")
+                                },
+                                onDrag = { change, _ ->
+                                    change.consume()
+                                    val clickXRatio = ((change.position.x - originX) / displayW).coerceIn(0f, 1f)
+                                    val clickYRatio = ((change.position.y - originY) / displayH).coerceIn(0f, 1f)
+                                    client.sendMouseMoveAbs(clickXRatio, clickYRatio)
+                                }
+                            )
+                        } else {
+                            detectDragGestures(
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    client.sendMouseMove(dragAmount.x, dragAmount.y)
+                                }
+                            )
+                        }
+                    }
+            ) {
+                // Desktop Frame Image with GPU acceleration, zoom scaling and translation
+                Image(
+                    bitmap = frame.asImageBitmap(),
+                    contentDescription = "Mac Live Screen",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = zoomScale
+                            scaleY = zoomScale
+                            translationX = effectivePanX
+                            translationY = effectivePanY
+                        },
+                    contentScale = ContentScale.Fit
+                )
+
+                // High-Performance Real-Time Vector macOS Cursor Overlay
+                Canvas(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    val s = 24.dp.toPx()
+
+                    // Glowing Touch Halo / Pulse Indicator
+                    drawCircle(
+                        color = if (isCursorDown) Color(0xFF38BDF8).copy(alpha = 0.65f) else Color(0xFF38BDF8).copy(alpha = 0.32f),
+                        radius = if (isCursorDown) 20.dp.toPx() else 15.dp.toPx(),
+                        center = Offset(cursorPxX, cursorPxY)
+                    )
+
+                    // Draw Classic macOS Arrow Pointer Path
+                    val path = Path().apply {
+                        moveTo(cursorPxX, cursorPxY)
+                        lineTo(cursorPxX, cursorPxY + s * 0.85f)
+                        lineTo(cursorPxX + s * 0.22f, cursorPxY + s * 0.65f)
+                        lineTo(cursorPxX + s * 0.42f, cursorPxY + s * 1.0f)
+                        lineTo(cursorPxX + s * 0.58f, cursorPxY + s * 0.92f)
+                        lineTo(cursorPxX + s * 0.38f, cursorPxY + s * 0.58f)
+                        lineTo(cursorPxX + s * 0.68f, cursorPxY + s * 0.58f)
+                        close()
+                    }
+
+                    // Shadow
+                    drawPath(
+                        path = path,
+                        color = Color.Black.copy(alpha = 0.55f),
+                        style = Fill
+                    )
+
+                    // White fill
+                    drawPath(
+                        path = path,
+                        color = Color.White,
+                        style = Fill
+                    )
+
+                    // Crisp black outline
+                    drawPath(
+                        path = path,
+                        color = Color.Black,
+                        style = Stroke(width = 2.0.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    )
+                }
+
+                // Floating Chrome Remote Desktop Tool Palette (Pill & Zoom Pad)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = if (isFullscreen) 16.dp else 10.dp)
+                ) {
+                    CrdFloatingToolbar(
+                        isExpanded = isCrdToolsExpanded,
+                        onToggleExpanded = { isCrdToolsExpanded = !isCrdToolsExpanded },
+                        mouseMode = mouseMode,
+                        onToggleMouseMode = onToggleMouseMode,
+                        zoomScale = zoomScale,
+                        onZoomIn = { onZoomChange((zoomScale + 0.25f).coerceAtMost(5.0f)) },
+                        onZoomOut = {
+                            val next = (zoomScale - 0.25f).coerceAtLeast(1.0f)
+                            onZoomChange(next)
+                            if (next == 1.0f) onPanChange(Offset.Zero)
+                        },
+                        onZoomFit = {
+                            onZoomChange(1.0f)
+                            onPanChange(Offset.Zero)
+                        },
+                        onZoomOneToOne = {
+                            onZoomChange(2.0f)
+                        },
+                        isFullscreen = isFullscreen,
+                        onToggleFullscreen = onToggleFullscreen,
+                        showKeyboard = showKeyboard,
+                        onToggleKeyboard = onToggleKeyboard,
+                        onRefreshFrame = { client.requestSingleFrame() },
+                        cursorX = cursorX,
+                        cursorY = cursorY
+                    )
+                }
+            }
         } else {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -727,6 +1083,205 @@ private fun LiveDesktopPane(
                     ) {
                         Text("Refresh Screen Frame", fontSize = 12.sp)
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Floating CRD Toolbar (Pill, Zoom Pads, Modes, Fullscreen)
+
+@Composable
+private fun CrdFloatingToolbar(
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    mouseMode: MouseInputMode,
+    onToggleMouseMode: () -> Unit,
+    zoomScale: Float,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onZoomFit: () -> Unit,
+    onZoomOneToOne: () -> Unit,
+    isFullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
+    showKeyboard: Boolean,
+    onToggleKeyboard: () -> Unit,
+    onRefreshFrame: () -> Unit,
+    cursorX: Float,
+    cursorY: Float
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF141822).copy(alpha = 0.90f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+        shadowElevation = 8.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Main Pill Row (Always Visible)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Mode Toggle Button (Trackpad vs Direct Touch)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (mouseMode == MouseInputMode.TRACKPAD) Color(0xFF2563EB).copy(alpha = 0.35f) else Color(0xFF10B981).copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, if (mouseMode == MouseInputMode.TRACKPAD) Color(0xFF38BDF8) else Color(0xFF34D399)),
+                    modifier = Modifier.clickable { onToggleMouseMode() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (mouseMode == MouseInputMode.TRACKPAD) Icons.Default.Mouse else Icons.Default.TouchApp,
+                            contentDescription = null,
+                            tint = if (mouseMode == MouseInputMode.TRACKPAD) Color(0xFF38BDF8) else Color(0xFF34D399),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = if (mouseMode == MouseInputMode.TRACKPAD) "Trackpad" else "Touch",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Dedicated Zoom Pad Pill
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White.copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        IconButton(
+                            onClick = onZoomOut,
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.ZoomOut, contentDescription = "Zoom Out", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+
+                        Text(
+                            text = "${(zoomScale * 100).toInt()}%",
+                            color = Color(0xFF38BDF8),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 2.dp)
+                        )
+
+                        IconButton(
+                            onClick = onZoomIn,
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (zoomScale == 1.0f) Color(0xFF2563EB) else Color.White.copy(alpha = 0.1f))
+                                .clickable { onZoomFit() }
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                            Text("Fit", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.White.copy(alpha = 0.1f))
+                                .clickable { onZoomOneToOne() }
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                            Text("1:1", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                // Keyboard Toggle
+                IconButton(
+                    onClick = onToggleKeyboard,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Keyboard,
+                        contentDescription = "Keyboard",
+                        tint = if (showKeyboard) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Fullscreen Toggle
+                IconButton(
+                    onClick = onToggleFullscreen,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                        contentDescription = if (isFullscreen) "Exit Fullscreen" else "Enter Fullscreen",
+                        tint = if (isFullscreen) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Refresh Frame
+                IconButton(
+                    onClick = onRefreshFrame,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh Frame",
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+
+                // Expand/Collapse Details
+                IconButton(
+                    onClick = onToggleExpanded,
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "More Tools",
+                        tint = if (isExpanded) Color(0xFF38BDF8) else Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+
+            // Expanded Sub-Bar: Mini Cursor Radar & Guidance
+            AnimatedVisibility(visible = isExpanded) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Mac Pointer: X: ${(cursorX * 100).toInt()}% • Y: ${(cursorY * 100).toInt()}%",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Text(
+                        text = if (mouseMode == MouseInputMode.TRACKPAD) "Swipe to move cursor • Tap to click" else "Direct touch active • Tap element",
+                        color = Color(0xFF38BDF8).copy(alpha = 0.8f),
+                        fontSize = 10.sp
+                    )
                 }
             }
         }
@@ -941,14 +1496,42 @@ private fun VirtualKeyboardBar(
                 }
             }
 
-            // Quick Mac Shortcut Buttons
+            // Quick Mac Shortcut Buttons - Row 1 (System & Window Actions)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                KeyShortcutChip("⌘ Space", "Spotlight") { onKeyCombo("spotlight") }
-                KeyShortcutChip("⌘ Tab", "Apps") { onKeyCombo("app_switcher") }
+                KeyShortcutChip("⌘⌥Esc", "Force Quit", accentColor = Color(0xFFF87171), borderColor = Color(0xFFEF4444).copy(alpha = 0.5f)) {
+                    onKeyCombo("force_quit")
+                }
+                KeyShortcutChip("⌘ Space", "Spotlight", accentColor = Color(0xFF38BDF8)) {
+                    onKeyCombo("spotlight")
+                }
+                KeyShortcutChip("⌘ Tab", "Apps") {
+                    onKeyCombo("app_switcher")
+                }
+                KeyShortcutChip("⌘ W", "Close") {
+                    onKeyCombo("close_window")
+                }
+                KeyShortcutChip("⌘ Q", "Quit") {
+                    onKeyCombo("quit_app")
+                }
+                KeyShortcutChip("⌘ Z", "Undo") {
+                    onKeyCombo("undo")
+                }
+            }
+
+            // Quick Mac Shortcut Buttons - Row 2 (Editing & Navigation)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                KeyShortcutChip("⌘ C", "Copy") { onKeyCombo("copy") }
+                KeyShortcutChip("⌘ V", "Paste") { onKeyCombo("paste") }
+                KeyShortcutChip("⌘ A", "Select All") { onKeyCombo("select_all") }
+                KeyShortcutChip("⌘ S", "Save") { onKeyCombo("save") }
                 KeyShortcutChip("Esc", "Esc") { onKeyCombo("escape") }
+                KeyShortcutChip("Tab", "Tab") { onKeyCombo("tab") }
                 KeyShortcutChip("Enter", "Return") { onKeyCombo("enter") }
                 KeyShortcutChip("⌫", "Del") { onKeyCombo("backspace") }
                 KeyShortcutChip("Space", "Space") { onKeyCombo("space") }
@@ -961,22 +1544,25 @@ private fun VirtualKeyboardBar(
 private fun KeyShortcutChip(
     keyLabel: String,
     helpText: String,
+    accentColor: Color = Color.White,
+    backgroundColor: Color = Color(0xFF262E40),
+    borderColor: Color = Color.White.copy(alpha = 0.12f),
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFF262E40))
-            .border(1.dp, Color.White.opacity(0.12f), RoundedCornerShape(6.dp))
+            .background(backgroundColor)
+            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 7.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = keyLabel,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = accentColor,
                 fontSize = 11.sp
             )
         )
