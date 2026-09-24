@@ -266,10 +266,17 @@ fun MacRemoteControlScreen(
                         pin = pinText,
                         connectionState = connectionState,
                         statusMessage = statusMessage,
-                        onHostChange = {
-                            hostText = it
-                            val p = portText.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
-                            client.saveConnectionDetails(context, it, p, pinText)
+                        onHostChange = { raw ->
+                            val currentP = portText.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
+                            val (parsedHost, parsedPort) = MacRemoteClient.parseHostAndPort(raw, currentP)
+                            if (raw.contains(":") && !raw.contains("::")) {
+                                hostText = parsedHost
+                                portText = parsedPort.toString()
+                                client.saveConnectionDetails(context, parsedHost, parsedPort, pinText)
+                            } else {
+                                hostText = raw.trim()
+                                client.saveConnectionDetails(context, hostText, currentP, pinText)
+                            }
                         },
                         onPortChange = {
                             portText = it
@@ -282,9 +289,12 @@ fun MacRemoteControlScreen(
                             client.saveConnectionDetails(context, hostText, p, it)
                         },
                         onConnect = {
-                            val p = portText.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
-                            client.saveConnectionDetails(context, hostText, p, pinText)
-                            client.connect(hostText, p, pinText)
+                            val currentP = portText.toIntOrNull() ?: MacRemoteProtocol.DEFAULT_PORT
+                            val (parsedHost, parsedPort) = MacRemoteClient.parseHostAndPort(hostText, currentP)
+                            hostText = parsedHost
+                            portText = parsedPort.toString()
+                            client.saveConnectionDetails(context, parsedHost, parsedPort, pinText)
+                            client.connect(parsedHost, parsedPort, pinText)
                         },
                         onDisconnect = {
                             client.disconnect()
@@ -477,7 +487,7 @@ private fun ConnectionCard(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "Target Mac (WAN, Tailscale, or LAN IP)",
+                text = "Target Mac (Tailscale MagicDNS, WAN, or LAN IP)",
                 style = MaterialTheme.typography.labelSmall.copy(
                     color = Color.White.opacity(0.7f),
                     fontWeight = FontWeight.Medium
@@ -489,7 +499,7 @@ private fun ConnectionCard(
                     value = host,
                     onValueChange = onHostChange,
                     modifier = Modifier.weight(2.5f),
-                    placeholder = { Text("e.g. 100.84.x.x or IP", color = Color.Gray, fontSize = 13.sp) },
+                    placeholder = { Text("e.g. MagicDNS (*.ts.net) or IP", color = Color.Gray, fontSize = 13.sp) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -1366,6 +1376,28 @@ private fun LiveDesktopPane(
                         cursorX = cursorX,
                         cursorY = cursorY
                     )
+                }
+
+                // Tactile Scroll Wheel - Docked at Lower Right when not in full-screen view
+                if (!isFullscreen) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 12.dp, bottom = 16.dp)
+                    ) {
+                        TactileScrollWheel(
+                            modifier = Modifier
+                                .width(44.dp)
+                                .height(175.dp),
+                            enabled = isConnected,
+                            onScroll = { deltaY ->
+                                client.sendMouseScroll(0f, deltaY)
+                            },
+                            onNotchTick = {
+                                triggerScrollNotchHaptic(context, view)
+                            }
+                        )
+                    }
                 }
             }
         } else {

@@ -354,3 +354,22 @@ This document tracks system issues identified, analyzed, and resolved across mac
      - **Mission Control Gesture (`triggerMissionControlHaptic`):** Generates a distinct double-bump waveform (`timings = [0, 30, 40, 35]`, `amplitudes = [0, 220, 0, 255]`) paired with `HapticFeedbackConstants.CONFIRM` for unambiguous gesture confirmation.
      - **Activity DecorView Fallback:** Added recursive `Context.findActivity()` unwrapping so haptics resolve the window decorView regardless of Compose context wrapping.
   3. **Build & Live Verification:** Compiled debug and release APKs (`app-release.apk`, 7.2MB) with Gradle 8.7, deployed to Samsung Galaxy S21 over ADB (`192.168.1.116:5555`), and confirmed permission grant and runtime feedback.
+
+---
+
+### [Issue #020]: Tailscale MagicDNS (*.ts.net) Resolution Failure on Android and Scroll Wheel Missing in Live Desktop View
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `android-companion/MacRemoteClient.kt`, `android-companion/MacRemoteControlScreen.kt`
+- **Symptom:**
+  1. Entering or pasting a Tailscale MagicDNS address (`*.ts.net` or `hostname:port`) into the Target Mac input failed to connect.
+  2. The 3D tactile scroll wheel with haptic feedback was only present on the trackpad pane and was missing from the Live Desktop stream pane.
+- **Root Cause Analysis:**
+  1. **Android Private DNS Bypassing Tailscale MagicDNS:** When Android Private DNS (DNS-over-TLS) is enabled (default on Android 10-15/One UI), standard Java DNS resolution (`Dns.SYSTEM` via `InetAddress.getAllByName`) routes queries to public upstream resolvers (e.g., Google or Cloudflare) which return `NXDOMAIN` for Tailscale private `*.ts.net` domains. While Tailscale's local DNS resolver (`100.100.100.100:53`) is directly accessible on the tailnet, OkHttp was relying exclusively on `Dns.SYSTEM`.
+  2. **URL / Hostname Formatting Fragility:** Pasting strings containing protocols (`http://`, `ws://`), path slashes (`/`), or embedded ports (`host:8089`) produced malformed WebSocket URLs (e.g., `ws://host:8089:8089`), throwing uncaught `IllegalArgumentException` in OkHttp.
+  3. **Absence of Scroll Wheel in Live Stream Mode:** `TactileScrollWheel` was previously only instantiated within `TrackpadPane` and was not docked in `LiveDesktopPane`.
+- **Resolution:**
+  1. **Embedded Tailscale MagicDNS Fallback Resolver (`TailscaleAwareDns`):** Implemented an RFC 1035 UDP DNS client in `MacRemoteClient.kt`. When standard system DNS fails to resolve a hostname, it automatically queries Tailscale's internal resolver at `100.100.100.100:53` with a 2.5s timeout, parsing Type A IPv4 answers and resolving `*.ts.net` MagicDNS transparently.
+  2. **Intelligent URL & Port Sanitizer (`parseHostAndPort`):** Automatically cleans leading protocols, trailing slashes, and whitespace. When a user pastes `host:port` into the host field, it parses and populates both the Host and Port fields simultaneously.
+  3. **Live Desktop Tactile Scroll Wheel Integration:** Added `TactileScrollWheel` docked at the lower right (`Alignment.BottomEnd`) in `LiveDesktopPane` when `!isFullscreen`. Automatically hides during fullscreen view for an unblocked edge-to-edge desktop experience.
+

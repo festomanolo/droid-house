@@ -11,12 +11,19 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
+import java.net.UnknownHostException
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -45,13 +52,56 @@ class MacRemoteClient private constructor() {
         private const val KEY_PIN = "saved_pin"
 
         val shared = MacRemoteClient()
+
+        /**
+         * Sanitizes and parses host input, stripping protocols (ws://, http://),
+         * path segments, and extracting embedded ports (e.g. host:port or [ipv6]:port).
+         */
+        fun parseHostAndPort(rawInput: String, defaultPort: Int = MacRemoteProtocol.DEFAULT_PORT): Pair<String, Int> {
+            var s = rawInput.trim()
+            for (prefix in listOf("ws://", "wss://", "http://", "https://")) {
+                if (s.startsWith(prefix, ignoreCase = true)) {
+                    s = s.substring(prefix.length)
+                }
+            }
+            val slashIdx = s.indexOf('/')
+            if (slashIdx != -1) {
+                s = s.substring(0, slashIdx)
+            }
+            s = s.trim()
+
+            var extractedPort = defaultPort
+            var extractedHost = s
+
+            if (s.startsWith("[")) {
+                val closing = s.indexOf(']')
+                if (closing != -1) {
+                    val hostPart = s.substring(1, closing)
+                    val rest = s.substring(closing + 1)
+                    if (rest.startsWith(":") && rest.length > 1) {
+                        rest.substring(1).toIntOrNull()?.let { extractedPort = it }
+                    }
+                    extractedHost = hostPart
+                }
+            } else if (s.count { it == ':' } == 1) {
+                val parts = s.split(":")
+                val p = parts[1].trim().toIntOrNull()
+                if (p != null && p in 1..65535) {
+                    extractedPort = p
+                    extractedHost = parts[0].trim()
+                }
+            }
+
+            return Pair(extractedHost, extractedPort)
+        }
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private var pingJob: Job? = null
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
+        .dns(TailscaleAwareDns())
+        .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS) // Keep-alive WebSocket
         .writeTimeout(5, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
@@ -145,15 +195,24 @@ class MacRemoteClient private constructor() {
             disconnect()
         }
 
-        val cleanHost = host.trim()
-        val targetPort = if (port in 1..65535) port else MacRemoteProtocol.DEFAULT_PORT
-        val url = "ws://$cleanHost:$targetPort"
+        val (cleanHost, targetPort) = parseHostAndPort(host, port)
+        if (cleanHost.isEmpty()) {
+            updateState(ConnectionState.FAILED, "Please enter a valid Mac hostname or IP")
+            return
+        }
 
+        val url = "ws://$cleanHost:$targetPort"
         updateState(ConnectionState.CONNECTING, "Connecting to $cleanHost:$targetPort…")
 
-        val request = Request.Builder()
-            .url(url)
-            .build()
+        val request = try {
+            Request.Builder()
+                .url(url)
+                .build()
+        } catch (e: Exception) {
+            Log.e(TAG, "Invalid connection URL $url: ${e.message}", e)
+            updateState(ConnectionState.FAILED, "Invalid Host/URL: ${e.localizedMessage}")
+            return
+        }
 
         webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
@@ -178,7 +237,19 @@ class MacRemoteClient private constructor() {
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "WebSocket failure: ${t.localizedMessage}", t)
-                updateState(ConnectionState.FAILED, "Connection failed: ${t.localizedMessage ?: "Network error"}")
+                val failureMsg = when {
+                    t is UnknownHostException && cleanHost.contains(".ts.net") ->
+                        "Cannot resolve MagicDNS. Ensure Tailscale is running on phone."
+                    t is UnknownHostException ->
+                        "Cannot resolve '$cleanHost'. Check hostname or IP."
+                    t is java.net.ConnectException ->
+                        "Connection refused at $cleanHost:$targetPort. Check Mac app & port."
+                    t is java.net.SocketTimeoutException ->
+                        "Timed out connecting to $cleanHost:$targetPort."
+                    else ->
+                        t.localizedMessage ?: "Network error"
+                }
+                updateState(ConnectionState.FAILED, "Connection failed: $failureMsg")
                 cleanup()
             }
         })
@@ -399,5 +470,142 @@ class MacRemoteClient private constructor() {
         } catch (e: Exception) {
             Log.w(TAG, "Send error: ${e.localizedMessage}")
         }
+    }
+}
+
+// MARK: - Tailscale-Aware DNS Resolver
+//
+// Automatically falls back to Tailscale's MagicDNS resolver (100.100.100.100:53)
+// when Android's Private DNS (DNS-over-TLS) or system DNS fails to resolve
+// internal *.ts.net / *.tailscale.net hostnames.
+
+class TailscaleAwareDns : Dns {
+    override fun lookup(hostname: String): List<InetAddress> {
+        // 1. Literal IP check (IPv4 or IPv6)
+        try {
+            val ip = InetAddress.getByName(hostname)
+            if (ip.hostAddress == hostname || hostname.startsWith("[")) {
+                return listOf(ip)
+            }
+        } catch (_: Exception) {}
+
+        // 2. Query System DNS first
+        try {
+            val systemResults = Dns.SYSTEM.lookup(hostname)
+            if (systemResults.isNotEmpty()) {
+                return systemResults
+            }
+        } catch (e: Exception) {
+            Log.w("TailscaleDns", "System DNS resolution failed for '$hostname': ${e.message}")
+        }
+
+        // 3. Fallback: Query Tailscale MagicDNS directly at 100.100.100.100:53
+        val magicResults = queryTailscaleDns(hostname)
+        if (magicResults.isNotEmpty()) {
+            Log.i("TailscaleDns", "Resolved '$hostname' via Tailscale MagicDNS -> $magicResults")
+            return magicResults
+        }
+
+        throw UnknownHostException("Unable to resolve '$hostname' via System DNS or Tailscale MagicDNS (100.100.100.100). Make sure Tailscale is connected.")
+    }
+
+    private fun queryTailscaleDns(hostname: String): List<InetAddress> {
+        val results = mutableListOf<InetAddress>()
+        var socket: DatagramSocket? = null
+        try {
+            socket = DatagramSocket()
+            socket.soTimeout = 2500 // 2.5s timeout
+
+            val baos = ByteArrayOutputStream()
+            val dos = DataOutputStream(baos)
+
+            // DNS header: ID, Flags (RD=1), QDCOUNT=1
+            val txId = (System.currentTimeMillis() and 0xFFFF).toInt()
+            dos.writeShort(txId)
+            dos.writeShort(0x0100) // Standard query with recursion desired
+            dos.writeShort(1)      // 1 question
+            dos.writeShort(0)
+            dos.writeShort(0)
+            dos.writeShort(0)
+
+            // QNAME: labels length-prefixed, ending in 0
+            val cleanHost = hostname.trimEnd('.')
+            val labels = cleanHost.split('.')
+            for (label in labels) {
+                val bytes = label.toByteArray(Charsets.US_ASCII)
+                dos.writeByte(bytes.size)
+                dos.write(bytes)
+            }
+            dos.writeByte(0)
+
+            // QTYPE: 1 (Type A, IPv4)
+            dos.writeShort(1)
+            // QCLASS: 1 (IN)
+            dos.writeShort(1)
+            dos.flush()
+
+            val queryData = baos.toByteArray()
+            val tailscaleDnsServer = InetAddress.getByName("100.100.100.100")
+            val sendPacket = DatagramPacket(queryData, queryData.size, tailscaleDnsServer, 53)
+            socket.send(sendPacket)
+
+            val recvBuffer = ByteArray(512)
+            val recvPacket = DatagramPacket(recvBuffer, recvBuffer.size)
+            socket.receive(recvPacket)
+
+            val respData = recvPacket.data
+            val respLen = recvPacket.length
+            if (respLen < 12) return emptyList()
+
+            var idx = 0
+            val respTxId = ((respData[idx++].toInt() and 0xFF) shl 8) or (respData[idx++].toInt() and 0xFF)
+            val flags = ((respData[idx++].toInt() and 0xFF) shl 8) or (respData[idx++].toInt() and 0xFF)
+            val qdCount = ((respData[idx++].toInt() and 0xFF) shl 8) or (respData[idx++].toInt() and 0xFF)
+            val anCount = ((respData[idx++].toInt() and 0xFF) shl 8) or (respData[idx++].toInt() and 0xFF)
+            idx += 4 // skip NSCOUNT and ARCOUNT
+
+            if (anCount == 0) return emptyList()
+
+            // Skip question section
+            for (i in 0 until qdCount) {
+                while (idx < respLen && respData[idx].toInt() != 0) {
+                    val len = respData[idx].toInt() and 0xFF
+                    idx += 1 + len
+                }
+                idx += 5 // 0-byte + QTYPE(2) + QCLASS(2)
+            }
+
+            // Parse answer records
+            for (i in 0 until anCount) {
+                if (idx >= respLen) break
+                // Name (could be compressed pointer 0xC0 or label)
+                if ((respData[idx].toInt() and 0xC0) == 0xC0) {
+                    idx += 2
+                } else {
+                    while (idx < respLen && respData[idx].toInt() != 0) {
+                        idx += 1 + (respData[idx].toInt() and 0xFF)
+                    }
+                    idx += 1
+                }
+                if (idx + 10 > respLen) break
+
+                val atype = ((respData[idx++].toInt() and 0xFF) shl 8) or (respData[idx++].toInt() and 0xFF)
+                val aclass = ((respData[idx++].toInt() and 0xFF) shl 8) or (respData[idx++].toInt() and 0xFF)
+                idx += 4 // skip TTL
+                val rdlen = ((respData[idx++].toInt() and 0xFF) shl 8) or (respData[idx++].toInt() and 0xFF)
+
+                if (atype == 1 && rdlen == 4 && idx + 4 <= respLen) {
+                    val ipBytes = ByteArray(4)
+                    System.arraycopy(respData, idx, ipBytes, 0, 4)
+                    results.add(InetAddress.getByAddress(hostname, ipBytes))
+                }
+                idx += rdlen
+            }
+        } catch (e: Exception) {
+            Log.w("TailscaleDns", "Direct MagicDNS query to 100.100.100.100 failed: ${e.message}")
+        } finally {
+            try { socket?.close() } catch (_: Exception) {}
+        }
+        return results
     }
 }
