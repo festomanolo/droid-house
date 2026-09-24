@@ -10,11 +10,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +33,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,6 +62,11 @@ import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
@@ -606,7 +616,8 @@ private fun TrackpadPane(
     onToggleKeyboard: () -> Unit
 ) {
     val context = LocalContext.current
-    var isDragging by remember { mutableStateOf(false) }
+    var activeGestureHint by remember { mutableStateOf<String?>(null) }
+    var lastTapTimestamp by remember { mutableLongStateOf(0L) }
 
     Column(
         modifier = Modifier
@@ -614,7 +625,7 @@ private fun TrackpadPane(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Trackpad Surface
+        // Trackpad Surface Container
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -622,38 +633,115 @@ private fun TrackpadPane(
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color(0xFF131722).opacity(0.85f))
                 .border(1.dp, Color.White.opacity(0.08f), RoundedCornerShape(20.dp))
-                .pointerInput(isConnected) {
-                    if (!isConnected) return@pointerInput
-
-                    detectTapGestures(
-                        onTap = {
-                            triggerHaptic(context)
-                            client.sendMouseClick("left")
-                        },
-                        onDoubleTap = {
-                            triggerHaptic(context)
-                            client.sendMouseDoubleClick()
-                        },
-                        onLongPress = {
-                            triggerHaptic(context)
-                            client.sendMouseClick("right")
-                        }
-                    )
-                }
-                .pointerInput(isConnected) {
-                    if (!isConnected) return@pointerInput
-
-                    detectDragGestures(
-                        onDragStart = { isDragging = true },
-                        onDragEnd = { isDragging = false },
-                        onDragCancel = { isDragging = false },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            client.sendMouseMove(dragAmount.x, dragAmount.y)
-                        }
-                    )
-                }
         ) {
+            // Touch & Gestures Detection Area (Multi-Touch: 1-finger move/tap, 2-finger scroll/tap, 3-finger Mission Control)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(isConnected) {
+                        if (!isConnected) return@pointerInput
+
+                        awaitEachGesture {
+                            val firstDown = awaitFirstDown(requireUnconsumed = false)
+                            var maxPointers = 1
+                            var totalDist1 = 0f
+                            val startTime = System.currentTimeMillis()
+                            var isLongPressFired = false
+                            var missionControlTriggered = false
+                            var showDesktopTriggered = false
+                            var threeFingerAccumY = 0f
+                            var twoFingerTapEligible = true
+                            var twoFingerStartTime = 0L
+
+                            do {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                val currentCount = pressed.size
+
+                                if (currentCount > maxPointers) {
+                                    maxPointers = currentCount
+                                }
+
+                                if (currentCount == 1 && maxPointers == 1) {
+                                    val change = pressed.first()
+                                    val delta = change.position - change.previousPosition
+                                    totalDist1 += delta.getDistance()
+
+                                    // Long-press detection (stationary > 500ms -> Right Click)
+                                    if (!isLongPressFired && totalDist1 < 12f && (System.currentTimeMillis() - startTime >= 500L)) {
+                                        isLongPressFired = true
+                                        triggerHaptic(context)
+                                        activeGestureHint = "Right Click"
+                                        client.sendMouseClick("right")
+                                    }
+
+                                    if (totalDist1 > 6f) {
+                                        client.sendMouseMove(delta.x, delta.y)
+                                    }
+                                    change.consume()
+                                } else if (currentCount == 2) {
+                                    if (twoFingerStartTime == 0L) {
+                                        twoFingerStartTime = System.currentTimeMillis()
+                                    }
+                                    val c0 = pressed[0]
+                                    val c1 = pressed[1]
+                                    val d0 = c0.position - c0.previousPosition
+                                    val d1 = c1.position - c1.previousPosition
+                                    val avgDx = (d0.x + d1.x) / 2f
+                                    val avgDy = (d0.y + d1.y) / 2f
+
+                                    if (Math.abs(avgDx) > 2f || Math.abs(avgDy) > 2f) {
+                                        twoFingerTapEligible = false
+                                        activeGestureHint = "↕ Two-Finger Scrolling"
+                                        client.sendMouseScroll(avgDx, avgDy)
+                                    }
+                                    pressed.forEach { it.consume() }
+                                } else if (currentCount >= 3) {
+                                    twoFingerTapEligible = false
+                                    val avgDy = pressed.map { it.position.y - it.previousPosition.y }.average().toFloat()
+                                    threeFingerAccumY += avgDy
+
+                                    // Swipe UP (accumulated negative deltaY) -> Mission Control
+                                    if (!missionControlTriggered && threeFingerAccumY < -50f) {
+                                        missionControlTriggered = true
+                                        triggerMissionControlHaptic(context)
+                                        activeGestureHint = "⎋ Mission Control"
+                                        client.sendSystemAction(MacRemoteProtocol.SystemAction.MISSION_CONTROL.rawValue)
+                                    } else if (!showDesktopTriggered && threeFingerAccumY > 50f) {
+                                        showDesktopTriggered = true
+                                        triggerMissionControlHaptic(context)
+                                        activeGestureHint = "⌘ Show Desktop"
+                                        client.sendSystemAction(MacRemoteProtocol.SystemAction.SHOW_DESKTOP.rawValue)
+                                    }
+                                    pressed.forEach { it.consume() }
+                                }
+                            } while (event.changes.any { it.pressed })
+
+                            // All fingers lifted
+                            val elapsed = System.currentTimeMillis() - startTime
+                            if (maxPointers == 1 && totalDist1 < 12f && !isLongPressFired && elapsed < 300) {
+                                triggerHaptic(context)
+                                val now = System.currentTimeMillis()
+                                if (now - lastTapTimestamp < 320) {
+                                    client.sendMouseDoubleClick()
+                                    lastTapTimestamp = 0L
+                                } else {
+                                    client.sendMouseClick("left")
+                                    lastTapTimestamp = now
+                                }
+                            } else if (maxPointers == 2 && twoFingerTapEligible && (System.currentTimeMillis() - twoFingerStartTime < 350)) {
+                                // Two-finger tap -> Right Click!
+                                triggerHaptic(context)
+                                activeGestureHint = "Right Click"
+                                client.sendMouseClick("right")
+                            }
+
+                            activeGestureHint = null
+                        }
+                    }
+            )
+
+            // Header HUD & Radar Controls inside Trackpad
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -734,12 +822,59 @@ private fun TrackpadPane(
                 }
 
                 Text(
-                    text = "1-Finger: Move • Tap: Click • Long-Press: Right Click • Drag: Move",
+                    text = "1-Finger: Move/Tap • 2-Finger: Scroll/Right-Click • 3-Finger: Mission Control",
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = Color.White.opacity(0.35f),
                         fontSize = 10.sp
                     )
                 )
+            }
+
+            // Tactile Scroll Wheel - Docked at Right Center of Trackpad with Haptic Feedback
+            if (isConnected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 12.dp)
+                ) {
+                    TactileScrollWheel(
+                        modifier = Modifier
+                            .width(46.dp)
+                            .height(190.dp),
+                        enabled = isConnected,
+                        onScroll = { deltaY ->
+                            client.sendMouseScroll(0f, deltaY)
+                        },
+                        onNotchTick = {
+                            triggerScrollNotchHaptic(context)
+                        }
+                    )
+                }
+            }
+
+            // Active Gesture HUD Pill Banner (Center of Trackpad)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = activeGestureHint != null,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF0F172A).copy(alpha = 0.94f))
+                        .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.65f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                ) {
+                    Text(
+                        text = activeGestureHint ?: "",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF38BDF8),
+                            fontSize = 13.sp
+                        )
+                    )
+                }
             }
         }
 
@@ -791,6 +926,175 @@ private fun TrackpadPane(
                     )
                 )
             }
+        }
+    }
+}
+
+// MARK: - Tactile Physical Scroll Wheel Component
+
+@Composable
+private fun TactileScrollWheel(
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onScroll: (deltaY: Float) -> Unit,
+    onNotchTick: () -> Unit
+) {
+    var accumulatedDelta by remember { mutableFloatStateOf(0f) }
+    var wheelAngle by remember { mutableFloatStateOf(0f) }
+    var isTouching by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0F141F),
+                        Color(0xFF181F2E),
+                        Color(0xFF0F141F)
+                    )
+                )
+            )
+            .border(
+                1.5.dp,
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF38BDF8).copy(alpha = if (isTouching) 0.65f else 0.25f),
+                        Color.White.copy(alpha = 0.12f),
+                        Color(0xFF38BDF8).copy(alpha = if (isTouching) 0.55f else 0.18f)
+                    )
+                ),
+                RoundedCornerShape(24.dp)
+            )
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectDragGestures(
+                    onDragStart = { isTouching = true },
+                    onDragEnd = { isTouching = false },
+                    onDragCancel = { isTouching = false },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val dy = dragAmount.y
+                        wheelAngle += dy * 0.85f
+                        accumulatedDelta += dy
+
+                        val notchThreshold = 18f
+                        while (Math.abs(accumulatedDelta) >= notchThreshold) {
+                            val sign = if (accumulatedDelta > 0) 1f else -1f
+                            onNotchTick()
+                            onScroll(sign * 24f)
+                            accumulatedDelta -= sign * notchThreshold
+                        }
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+
+            // 1. 3D curved cylinder shading (radial/horizontal lighting)
+            drawRoundRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFF0A0D14),
+                        Color(0xFF263045),
+                        Color(0xFF323F5A),
+                        Color(0xFF263045),
+                        Color(0xFF0A0D14)
+                    )
+                ),
+                cornerRadius = CornerRadius(22.dp.toPx())
+            )
+
+            // 2. Tactile rib ridges / notches with perspective projection
+            val ribSpacing = 16.dp.toPx()
+            val totalRibs = (h / ribSpacing).toInt() + 4
+            val baseOffset = (wheelAngle % ribSpacing + ribSpacing) % ribSpacing
+
+            for (i in -2..totalRibs) {
+                val y = i * ribSpacing + baseOffset
+                if (y in -8f..(h + 8f)) {
+                    val distFromCenter = Math.abs(y - h / 2f) / (h / 2f)
+                    val alpha = (1f - distFromCenter * 0.75f).coerceIn(0.12f, 1f)
+                    val notchW = w * (0.80f - distFromCenter * 0.16f)
+                    val left = (w - notchW) / 2f
+                    val right = left + notchW
+
+                    // Highlight rim (light metallic)
+                    drawLine(
+                        color = Color.White.copy(alpha = alpha * 0.38f),
+                        start = Offset(left, y),
+                        end = Offset(right, y),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                    // Groove shadow (deep black)
+                    drawLine(
+                        color = Color.Black.copy(alpha = alpha * 0.9f),
+                        start = Offset(left, y + 2.dp.toPx()),
+                        end = Offset(right, y + 2.dp.toPx()),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+
+            // 3. Center LED illumination detent pip
+            val centerIndicatorAlpha = if (isTouching) 0.95f else 0.55f
+            drawRoundRect(
+                color = Color(0xFF38BDF8).copy(alpha = centerIndicatorAlpha),
+                topLeft = Offset(w * 0.22f, h / 2f - 1.5.dp.toPx()),
+                size = Size(w * 0.56f, 3.dp.toPx()),
+                cornerRadius = CornerRadius(2.dp.toPx())
+            )
+
+            // 4. Recessed top/bottom shadow vignettes
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Black.copy(alpha = 0.88f),
+                        Color.Black.copy(alpha = 0.35f),
+                        Color.Transparent
+                    ),
+                    startY = 0f,
+                    endY = h * 0.26f
+                )
+            )
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.Black.copy(alpha = 0.35f),
+                        Color.Black.copy(alpha = 0.88f)
+                    ),
+                    startY = h * 0.74f,
+                    endY = h
+                )
+            )
+        }
+
+        // Top & bottom subtle arrow chevrons
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(vertical = 8.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowUp,
+                contentDescription = "Scroll Up",
+                tint = Color.White.copy(alpha = if (isTouching) 0.85f else 0.4f),
+                modifier = Modifier.size(16.dp)
+            )
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = "Scroll Down",
+                tint = Color.White.copy(alpha = if (isTouching) 0.85f else 0.4f),
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
@@ -1579,6 +1883,44 @@ private fun triggerHaptic(context: Context) {
             val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             @Suppress("DEPRECATION")
             vibrator?.vibrate(20)
+        }
+    } catch (_: Exception) { }
+}
+
+private fun triggerScrollNotchHaptic(context: Context) {
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+        } else {
+            @Suppress("DEPRECATION")
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(10)
+        }
+    } catch (_: Exception) { }
+}
+
+private fun triggerMissionControlHaptic(context: Context) {
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
+        } else {
+            @Suppress("DEPRECATION")
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(35)
         }
     } catch (_: Exception) { }
 }
