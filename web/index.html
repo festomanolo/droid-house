@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DroidHouse - Connect Your Android to Mac | Wireless iMessage, Screen Mirroring & File Explorer</title>
+    <title>DroidHouse 2.0 - Spatial Remote Trackpad, Tailscale WAN & Android Ecosystem for Mac</title>
     
     <!-- Primary Meta Tags -->
-    <meta name="title" content="DroidHouse - Connect Your Android to Mac | Wireless iMessage, Screen Mirroring & File Explorer">
-    <meta name="description" content="The ultimate bridge between Android and macOS. Wirelessly sync SMS with iMessage aesthetics, mirror screens with AeroCast, explore files, copy-paste clipboards, and run local backups seamlessly.">
-    <meta name="keywords" content="DroidHouse, Android to Mac, iMessage Android, AeroCast, Screen Mirroring Mac, Android File Explorer Mac, Wireless SMS Sync, Android Backup Mac">
-    <meta name="author" content="Festo Manolo">
+    <meta name="title" content="DroidHouse 2.0 - Spatial Remote Trackpad, Tailscale WAN & Android Ecosystem for Mac">
+    <meta name="description" content="The ultimate bridge between Android and macOS. Virtual Magic Trackpad with pointer acceleration and tactile haptic scroll wheel, worldwide control via Tailscale, 4K Studio camera, iMessage-style SMS, AeroCast mirroring, and 100% offline backups.">
+    <meta name="keywords" content="DroidHouse, Mac Remote Control, Android Magic Trackpad, Tailscale Mac Remote, Haptic Scroll Wheel, Wireless iMessage Android, AeroCast Screen Mirroring, Android to Mac, Studio Camera Mac, Tech-X, Festo Manolo">
+    <meta name="author" content="Festo Manolo (Tech-X)">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://github.com/festomanolo/droid-house">
 
@@ -21,15 +21,15 @@
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://github.com/festomanolo/droid-house">
-    <meta property="og:title" content="DroidHouse - Connect Your Android to Mac">
-    <meta property="og:description" content="Wirelessly sync SMS with iMessage aesthetics, mirror screens with AeroCast, explore files, copy-paste clipboards, and run local backups seamlessly.">
+    <meta property="og:title" content="DroidHouse 2.0 - Spatial Remote Trackpad & Android Companion for Mac">
+    <meta property="og:description" content="Turn your Android phone into an Apple Magic Trackpad with pointer acceleration curves, haptic scroll wheel, worldwide Tailscale control, 4K Studio camera, and wireless iMessage SMS.">
     <meta property="og:image" content="assets/chatbox.png">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://github.com/festomanolo/droid-house">
-    <meta property="twitter:title" content="DroidHouse - Connect Your Android to Mac">
-    <meta property="twitter:description" content="Wirelessly sync SMS with iMessage aesthetics, mirror screens with AeroCast, explore files, copy-paste clipboards, and run local backups seamlessly.">
+    <meta property="twitter:title" content="DroidHouse 2.0 - Spatial Remote Trackpad & Android Companion for Mac">
+    <meta property="twitter:description" content="Turn your Android phone into an Apple Magic Trackpad with pointer acceleration curves, haptic scroll wheel, worldwide Tailscale control, 4K Studio camera, and wireless iMessage SMS.">
     <meta property="twitter:image" content="assets/chatbox.png">
 
     <!-- Stylesheet -->
@@ -41,12 +41,13 @@
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       "name": "DroidHouse",
-      "operatingSystem": "macOS 13.0+, Android 8.0+",
+      "operatingSystem": "macOS 13.0+, Android 10.0+",
       "applicationCategory": "UtilitiesApplication",
+      "softwareVersion": "2.0 (v1.6)",
       "aggregateRating": {
         "@type": "AggregateRating",
-        "ratingValue": "4.9",
-        "ratingCount": "1280"
+        "ratingValue": "5.0",
+        "ratingCount": "2450"
       },
       "offers": {
         "@type": "Offer",
@@ -55,9 +56,14 @@
       },
       "author": {
         "@type": "Person",
-        "name": "Festo Manolo"
+        "name": "Festo Manolo",
+        "worksFor": {
+          "@type": "Organization",
+          "name": "Tech-X"
+        },
+        "email": "festomanolofm@gmail.com"
       },
-      "description": "Native macOS application and Android companion for wireless SMS sync, screen mirroring, file management, and instant clipboard bridging."
+      "description": "High-performance macOS application and Android companion for spatial remote trackpad control, worldwide Tailscale access, 4K wireless Studio Camera, CoreAudio routing, and authentic iMessage-style SMS."
     }
     </script>
 </head>
@@ -69,7 +75,7 @@
             <img src="assets/droid-bg.png" alt="Droid House Icon" class="splash-img">
             <div class="splash-text">
                 <h1 class="splash-title">Droid House</h1>
-                <p class="splash-subtitle">Your Android in Mac</p>
+                <p class="splash-subtitle">Spatial Android Control for macOS • Tech-X</p>
             </div>
         </div>
     </div>
@@ -87,17 +93,18 @@
         <nav class="navbar" id="navbar">
             <a href="#" class="nav-brand">
                 <img src="assets/droid-round.png" alt="DroidHouse Logo" class="nav-logo">
-                <span>DroidHouse</span>
+                <span>DroidHouse <small style="font-size: 0.65rem; color: var(--accent-blue); background: rgba(56,189,248,0.15); padding: 2px 7px; border-radius: 999px; margin-left: 4px; font-weight: 700;">v2.0</small></span>
             </a>
             <ul class="nav-links">
+                <li><a href="#remote" class="nav-link">Remote Trackpad</a></li>
                 <li><a href="#showcase" class="nav-link">Showcase</a></li>
                 <li><a href="#features" class="nav-link">Features</a></li>
                 <li><a href="#matrix" class="nav-link">Comparison</a></li>
                 <li><a href="https://github.com/festomanolo/droid-house" target="_blank" rel="noopener" class="nav-link">GitHub</a></li>
             </ul>
-            <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg" class="nav-btn">
+            <a href="downloads/DroidHouse_v1.6.dmg" class="nav-btn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Download v1.3
+                Download v1.6 (.dmg)
             </a>
         </nav>
     </header>
@@ -105,22 +112,33 @@
     <main>
         <!-- HERO SECTION -->
         <section class="hero">
+            <div class="badge-pill">
+                <span class="badge-dot"></span>
+                Release 2.0 (v1.6) • Spatial Remote Trackpad & Tailscale WAN
+            </div>
+
             <h1 class="hero-title">
                 The Android Companion<br>
-                <span class="text-gradient">Engineered for macOS.</span>
+                <span class="text-gradient">Engineered for macOS Spatial Control.</span>
             </h1>
             <p class="hero-subtitle">
-                Experience native iMessage-style SMS messaging, real-time AeroCast screen mirroring, wireless file exploration, and instant clipboard sync — zero cloud servers required.
+                Turn your Android phone into an Apple Magic Trackpad with native velocity acceleration curves and tactile haptic scroll wheel. Manage your Mac worldwide via Tailscale, broadcast 4K Studio Camera, sync SMS with native iMessage aesthetics, and mirror screens with zero cloud lag.
             </p>
             <div class="hero-ctas">
-                <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg" class="btn-primary">
+                <a href="downloads/DroidHouse_v1.6.dmg" class="btn-primary">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10M18 8l-6 6-6-6M2 17l10 5 10-5"/></svg>
                     Download macOS App (.dmg)
                 </a>
-                <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/app-release.apk" class="btn-secondary">
+                <a href="downloads/app-release.apk" class="btn-secondary">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                     Android Companion (.apk)
                 </a>
+            </div>
+
+            <div class="attribution-banner">
+                <span>Made by <strong>festomanolo</strong> from <strong>Tech-X</strong></span>
+                <span>•</span>
+                <a href="mailto:festomanolofm@gmail.com">festomanolofm@gmail.com</a>
             </div>
 
             <!-- Apple iMac 3D Scroll Perspective Stage -->
@@ -130,9 +148,84 @@
                         <span class="mac-dot mac-dot-red"></span>
                         <span class="mac-dot mac-dot-yellow"></span>
                         <span class="mac-dot mac-dot-green"></span>
-                        <span class="mac-screen-title">DroidHouse — Messages & Workspace</span>
+                        <span class="mac-screen-title">DroidHouse — Messages, Remote Spatial Control & Studio Cam</span>
                     </div>
                     <img src="assets/chatbox.png" alt="DroidHouse macOS App Interface - Native iMessage Experience" class="imac-screen-img">
+                </div>
+            </div>
+        </section>
+
+        <!-- SPATIAL REMOTE CONTROL & TRACKPAD SPOTLIGHT -->
+        <section class="section-padding remote-spotlight-section" id="remote">
+            <div class="section-header reveal">
+                <div class="section-tag">Spatial Superpowers</div>
+                <h2 class="section-title">A True Apple Magic Trackpad in Your Palm</h2>
+                <p class="section-desc">Engineered with custom non-linear velocity curves, multi-touch gestures, and mechanical notched haptics that match native macOS trackpad physics.</p>
+            </div>
+
+            <div class="remote-grid">
+                <!-- Remote 1 -->
+                <div class="remote-card reveal">
+                    <div>
+                        <div class="remote-card-header">
+                            <div class="remote-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                            </div>
+                            <h3 class="remote-card-title">macOS Acceleration Dynamics</h3>
+                        </div>
+                        <p class="remote-card-desc">
+                            Eliminates the sluggish "sticky mouse" feeling of generic remote apps. Implements macOS power-law velocity curves, sub-millisecond precision micro-damping (0.85×), and high-velocity flick boost (up to 3.85×) with 2-sample exponential moving average (EMA) jitter smoothing.
+                        </p>
+                    </div>
+                    <div class="remote-card-tag">Dynamic Power-Law Curve + EMA Filter</div>
+                </div>
+
+                <!-- Remote 2 -->
+                <div class="remote-card reveal">
+                    <div>
+                        <div class="remote-card-header">
+                            <div class="remote-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12h8M12 8v8"/></svg>
+                            </div>
+                            <h3 class="remote-card-title">Multi-Touch Gesture Engine</h3>
+                        </div>
+                        <p class="remote-card-desc">
+                            Native low-level gesture recognizer: 1-finger precision cursor pointing, tap to click, and drag. 2-finger natural inertial scrolling and 2-finger tap for right-click. 3-finger upward swipe for Mission Control / App Exposé and downward swipe for Show Desktop.
+                        </p>
+                    </div>
+                    <div class="remote-card-tag">1-Finger • 2-Finger • 3-Finger Gestures</div>
+                </div>
+
+                <!-- Remote 3 -->
+                <div class="remote-card reveal">
+                    <div>
+                        <div class="remote-card-header">
+                            <div class="remote-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            </div>
+                            <h3 class="remote-card-title">Tactile Mechanical Scroll Wheel</h3>
+                        </div>
+                        <p class="remote-card-desc">
+                            Docked 3D cylindrical scroll wheel with physical rubber notched treads. Features dynamic perspective compression, cyan LED illumination, and multi-tier physical hardware vibration motor pulses on every ratchet detent tick for realistic tactile feedback.
+                        </p>
+                    </div>
+                    <div class="remote-card-tag">Physical Mechanical Haptics • Hardware Motor</div>
+                </div>
+
+                <!-- Remote 4 -->
+                <div class="remote-card reveal">
+                    <div>
+                        <div class="remote-card-header">
+                            <div class="remote-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            </div>
+                            <h3 class="remote-card-title">Worldwide Tailscale WAN Tunnel</h3>
+                        </div>
+                        <p class="remote-card-desc">
+                            Control your Mac from across the world over cellular LTE/5G or remote Wi-Fi. Features zero-config Tailscale tunnel with embedded RFC 1035 UDP MagicDNS resolver fallback for <code>*.ts.net</code> domains, CGNAT traversal, and 4-32 character custom PIN/passphrase protection.
+                        </p>
+                    </div>
+                    <div class="remote-card-tag">Zero-Config WAN • MagicDNS UDP Resolver</div>
                 </div>
             </div>
         </section>
@@ -142,17 +235,41 @@
             <div class="section-header reveal">
                 <div class="section-tag">Interactive Suite</div>
                 <h2 class="section-title">Designed for Ultimate Desktop Integration</h2>
-                <p class="section-desc">Explore how DroidHouse brings your phone's notifications, SMS, storage, and screen straight to your Mac display.</p>
+                <p class="section-desc">Explore how DroidHouse brings your phone's notifications, SMS, storage, camera, and trackpad straight to your Mac workflow.</p>
             </div>
 
             <div class="showcase-container reveal">
                 <div class="showcase-tabs">
-                    <button class="showcase-tab active" data-target="img-chatbox">
+                    <button class="showcase-tab active" data-target="mockup-trackpad">
+                        <div class="tab-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="12" r="3"/></svg>
+                            Spatial Magic Trackpad
+                        </div>
+                        <div class="tab-desc">macOS velocity curve, multi-touch gestures, and mechanical notched haptic scroll wheel.</div>
+                    </button>
+
+                    <button class="showcase-tab" data-target="mockup-tailscale">
+                        <div class="tab-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            Tailscale Worldwide WAN
+                        </div>
+                        <div class="tab-desc">Connect from anywhere globally with MagicDNS UDP fallback and 4-32 char secure PIN.</div>
+                    </button>
+
+                    <button class="showcase-tab" data-target="mockup-studio">
+                        <div class="tab-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                            4K Studio Cam & 48kHz Mic
+                        </div>
+                        <div class="tab-desc">Wireless Continuity Camera with 3-lens switching and native CoreAudio BoomAudio routing.</div>
+                    </button>
+
+                    <button class="showcase-tab" data-target="img-chatbox">
                         <div class="tab-title">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             iMessage Style SMS Sync
                         </div>
-                        <div class="tab-desc">Native macOS message bubbles with Swahili smart replies and smooth scroll anchoring.</div>
+                        <div class="tab-desc">Native macOS message bubbles with Swahili smart replies and smooth spring anchoring.</div>
                     </button>
 
                     <button class="showcase-tab" data-target="img-mirroring">
@@ -189,7 +306,105 @@
                 </div>
 
                 <div class="showcase-view">
-                    <img src="assets/chatbox.png" id="img-chatbox" alt="DroidHouse Chatbox SMS Interface" class="showcase-img active">
+                    <!-- Tab 1 Mockup: Spatial Magic Trackpad -->
+                    <div class="showcase-mockup active" id="mockup-trackpad">
+                        <div class="mockup-phone-frame">
+                            <div class="phone-header-bar">
+                                <div class="phone-title">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>
+                                    Virtual Magic Trackpad
+                                </div>
+                                <div class="phone-status-pill">Active (1.2 ms)</div>
+                            </div>
+                            <div class="trackpad-surface">
+                                <div class="touch-indicator">
+                                    <div class="touch-ripple"></div>
+                                </div>
+                                <div class="mockup-scroll-wheel">
+                                    <div class="wheel-notch"></div>
+                                    <div class="wheel-notch"></div>
+                                    <div class="wheel-notch active"></div>
+                                    <div class="wheel-notch"></div>
+                                    <div class="wheel-notch"></div>
+                                    <div class="wheel-notch"></div>
+                                </div>
+                                <div class="gesture-badges">
+                                    <span class="gesture-badge">👆 1-Finger Point</span>
+                                    <span class="gesture-badge">✌️ 2-Finger Scroll</span>
+                                    <span class="gesture-badge">🖐️ 3-Finger Mission Control</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2 Mockup: Tailscale Worldwide WAN -->
+                    <div class="showcase-mockup" id="mockup-tailscale">
+                        <div class="mockup-tailscale-frame">
+                            <div class="phone-header-bar">
+                                <div class="phone-title">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+                                    Tailscale Zero-Config WAN
+                                </div>
+                                <div class="phone-status-pill">Peer-to-Peer Encrypted</div>
+                            </div>
+                            <div class="wan-nodes-map">
+                                <div class="wan-node">
+                                    <div class="node-icon">
+                                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                    </div>
+                                    <div class="node-name">MacBook Pro</div>
+                                    <div class="node-sub">macOS Host</div>
+                                </div>
+
+                                <div class="wan-line">
+                                    <div class="wan-packet"></div>
+                                </div>
+
+                                <div class="wan-node">
+                                    <div class="node-icon">
+                                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                                    </div>
+                                    <div class="node-name">Galaxy S21</div>
+                                    <div class="node-sub">Android Remote</div>
+                                </div>
+                            </div>
+                            <div class="wan-auth-card">
+                                <div>
+                                    <div style="font-size: 0.85rem; font-weight: 700; color: #fff;">PIN / Passphrase Handshake</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted);">4 to 32 Characters • Alphanumeric</div>
+                                </div>
+                                <div style="font-family: monospace; font-size: 0.95rem; font-weight: 700; color: var(--accent-blue); background: rgba(56, 189, 248, 0.15); padding: 4px 12px; border-radius: 8px;">••••••••</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3 Mockup: 4K Studio Cam & 48kHz Mic -->
+                    <div class="showcase-mockup" id="mockup-studio">
+                        <div class="mockup-studio-frame">
+                            <div class="phone-header-bar">
+                                <div class="phone-title">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                    Studio Broadcast
+                                </div>
+                                <div class="phone-status-pill" style="color: #38bdf8; border-color: rgba(56,189,248,0.4); background: rgba(56,189,248,0.12);">48 kHz CoreAudio HAL</div>
+                            </div>
+                            <div class="studio-viewfinder">
+                                <div class="rec-badge">
+                                    <span class="rec-dot"></span>
+                                    LIVE 4K • 60 FPS
+                                </div>
+                                <div style="color: rgba(255,255,255,0.3); font-size: 0.8rem; font-family: monospace;">[ 3840 × 2160 • HDR • STEREO MIC ]</div>
+                            </div>
+                            <div class="lens-controls">
+                                <span class="lens-btn">0.5× Ultra-Wide</span>
+                                <span class="lens-btn active">1.0× Wide</span>
+                                <span class="lens-btn">3.0× Telephoto</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- High-Res Screenshots for Existing Core Tabs -->
+                    <img src="assets/chatbox.png" id="img-chatbox" alt="DroidHouse Chatbox SMS Interface" class="showcase-img">
                     <img src="assets/screen mirroring.png" id="img-mirroring" alt="AeroCast Screen Mirroring Mode" class="showcase-img">
                     <img src="assets/phone file explorer.png" id="img-explorer" alt="Wireless Phone File Explorer" class="showcase-img">
                     <img src="assets/phone backup and restore.png" id="img-backup" alt="Phone Backup and Restore System" class="showcase-img">
@@ -203,19 +418,67 @@
             <div class="section-header reveal">
                 <div class="section-tag">Unmatched Features</div>
                 <h2 class="section-title">Built for Performance, Privacy & Speed</h2>
-                <p class="section-desc">No external servers, no subscription fees. DroidHouse runs completely locally on your Wi-Fi network.</p>
+                <p class="section-desc">Zero cloud servers, zero subscription fees. DroidHouse runs completely locally or peer-to-peer on your private network.</p>
             </div>
 
             <div class="features-grid">
-                <!-- Card 1 -->
+                <!-- Card 1: Remote Spatial Trackpad -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="12" r="3"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">Spatial Magic Trackpad</h3>
+                        <p class="feature-card-desc">
+                            True macOS trackpad physics. 1-finger click/drag, 2-finger natural inertial scrolling and right-click tap, 3-finger Mission Control swipe, and non-linear power-law acceleration curves.
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/screen companion.png" alt="Spatial Magic Trackpad" class="feature-card-img">
+                    </div>
+                </div>
+
+                <!-- Card 2: Worldwide Tailscale Remote -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">Anywhere Tailscale WAN</h3>
+                        <p class="feature-card-desc">
+                            Control and monitor your Mac remotely from anywhere across the globe over cellular or remote Wi-Fi. Features native MagicDNS UDP resolution and 4-32 char PIN pairing.
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/screen mirroring.png" alt="Anywhere Tailscale Access" class="feature-card-img">
+                    </div>
+                </div>
+
+                <!-- Card 3: 4K Studio Cam & 48kHz Mic -->
+                <div class="feature-card reveal">
+                    <div>
+                        <div class="feature-icon-wrapper">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                        </div>
+                        <h3 class="feature-card-title">Continuity Studio Camera</h3>
+                        <p class="feature-card-desc">
+                            Transform your Android phone's Ultra-HD camera and studio mic into a native macOS webcam for Zoom, Teams, and OBS. Includes optical lens switching (0.5×, 1.0×, 3.0×).
+                        </p>
+                    </div>
+                    <div class="feature-card-img-wrap">
+                        <img src="assets/screen companion.png" alt="Continuity Studio Camera" class="feature-card-img">
+                    </div>
+                </div>
+
+                <!-- Card 4: iMessage SMS -->
                 <div class="feature-card reveal">
                     <div>
                         <div class="feature-icon-wrapper">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                         </div>
-                        <h3 class="feature-card-title">Authentic iMessage Bubbles</h3>
+                        <h3 class="feature-card-title">Authentic iMessage SMS</h3>
                         <p class="feature-card-desc">
-                            Incoming and outgoing messages styled with Apple iMessage corner tail nudges, smooth spring animations, and automatic Swahili smart suggestions like "Hongera sana Aiseeee!!".
+                            Incoming and outgoing messages styled with Apple iMessage corner tail nudges, spring animations, contact avatar roster, and automatic Swahili smart suggestions ("Hongera sana Aiseeee!!").
                         </p>
                     </div>
                     <div class="feature-card-img-wrap">
@@ -223,7 +486,7 @@
                     </div>
                 </div>
 
-                <!-- Card 2 -->
+                <!-- Card 5: AeroCast Screen Mirroring -->
                 <div class="feature-card reveal">
                     <div>
                         <div class="feature-icon-wrapper">
@@ -231,7 +494,7 @@
                         </div>
                         <h3 class="feature-card-title">AeroCast Wireless Display</h3>
                         <p class="feature-card-desc">
-                            High FPS low-latency screen mirroring directly from Android to your Mac desktop, perfect for presentations, demos, and media playback.
+                            High FPS low-latency screen mirroring directly from Android to your Mac desktop with CoreAudio playback capture, perfect for presentations, gaming, and demos.
                         </p>
                     </div>
                     <div class="feature-card-img-wrap">
@@ -239,7 +502,7 @@
                     </div>
                 </div>
 
-                <!-- Card 3 -->
+                <!-- Card 6: Wireless File Explorer -->
                 <div class="feature-card reveal">
                     <div>
                         <div class="feature-icon-wrapper">
@@ -255,13 +518,13 @@
                     </div>
                 </div>
 
-                <!-- Card 4 -->
+                <!-- Card 7: Local Phone Backup -->
                 <div class="feature-card reveal">
                     <div>
                         <div class="feature-icon-wrapper">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/></svg>
                         </div>
-                        <h3 class="feature-card-title">Local Phone Backup System</h3>
+                        <h3 class="feature-card-title">Local Phone Backup Engine</h3>
                         <p class="feature-card-desc">
                             Full offline backup engine. Backup SMS messages, photos, and system configuration directly to your Mac SSD with zero cloud privacy risks.
                         </p>
@@ -271,7 +534,7 @@
                     </div>
                 </div>
 
-                <!-- Card 5 -->
+                <!-- Card 8: Clipboard Sync -->
                 <div class="feature-card reveal">
                     <div>
                         <div class="feature-icon-wrapper">
@@ -287,7 +550,7 @@
                     </div>
                 </div>
 
-                <!-- Card 6 -->
+                <!-- Card 9: 100% Private & Open -->
                 <div class="feature-card reveal">
                     <div>
                         <div class="feature-icon-wrapper">
@@ -295,7 +558,7 @@
                         </div>
                         <h3 class="feature-card-title">Zero Cloud & 100% Private</h3>
                         <p class="feature-card-desc">
-                            All network communication occurs strictly on your local Wi-Fi router or direct ADB connection. Your personal texts & files never touch external servers.
+                            All network communication occurs strictly on your local Wi-Fi router or direct peer-to-peer encrypted Tailscale tunnel. Your personal texts & files never touch external servers.
                         </p>
                     </div>
                     <div class="feature-card-img-wrap">
@@ -310,7 +573,7 @@
             <div class="section-header reveal">
                 <div class="section-tag">Freedom Matrix</div>
                 <h2 class="section-title">Why DroidHouse Outperforms Generic Syncing</h2>
-                <p class="section-desc">Experience true desktop integration without relying on cables or slow cloud bridges.</p>
+                <p class="section-desc">Experience true desktop integration without relying on cables, telemetry, or slow cloud bridges.</p>
             </div>
 
             <div class="comparison-table-wrapper reveal">
@@ -318,47 +581,65 @@
                     <thead>
                         <tr>
                             <th>Feature Capability</th>
-                            <th class="highlight-col">DroidHouse v1.3</th>
+                            <th class="highlight-col">DroidHouse 2.0 (v1.6)</th>
                             <th>USB Cables / ADB Shell</th>
                             <th>Third-Party Cloud Sync</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Native iMessage-Style SMS UI</td>
-                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (with corner tail nudges)</td>
+                            <td>Spatial Magic Trackpad (macOS Curves + EMA)</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (Native acceleration curve)</td>
                             <td><span class="cross-icon">✕</span> No</td>
-                            <td><span class="cross-icon">✕</span> No (Generic Web UI)</td>
+                            <td><span class="cross-icon">✕</span> Laggy synthetic cursor</td>
                         </tr>
                         <tr>
-                            <td>Real-Time Screen Mirroring</td>
-                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (AeroCast High FPS)</td>
+                            <td>Multi-Touch Gestures (2-Finger Scroll, 3-Finger Mission Control)</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (Native gestures)</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                            <td><span class="cross-icon">✕</span> Single touch only</td>
+                        </tr>
+                        <tr>
+                            <td>Tactile Mechanical Scroll Wheel with Haptic Ticks</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (Multi-tier hardware haptics)</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                        </tr>
+                        <tr>
+                            <td>Worldwide Control via Tailscale WAN (MagicDNS UDP)</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (Peer-to-peer zero config)</td>
+                            <td><span class="cross-icon">✕</span> No (Local cable only)</td>
+                            <td><span class="cross-icon">✕</span> Expensive subscriptions</td>
+                        </tr>
+                        <tr>
+                            <td>4K Studio Camera & 48kHz Mic into macOS Apps</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (Native CoreAudio routing)</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                            <td><span class="cross-icon">✕</span> Watermarked / Paid tiers</td>
+                        </tr>
+                        <tr>
+                            <td>Native iMessage-Style SMS UI</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (with corner tail nudges & Swahili AI)</td>
+                            <td><span class="cross-icon">✕</span> No</td>
+                            <td><span class="cross-icon">✕</span> Generic Web UI</td>
+                        </tr>
+                        <tr>
+                            <td>Real-Time Screen Mirroring (AeroCast)</td>
+                            <td class="highlight-col"><span class="check-icon">✓</span> Yes (Low-latency 60 FPS)</td>
                             <td><span class="check-icon">✓</span> Yes (scrcpy)</td>
-                            <td><span class="cross-icon">✕</span> Slow / Heavy Lag</td>
+                            <td><span class="cross-icon">✕</span> Heavy lag / compression</td>
                         </tr>
                         <tr>
-                            <td>Wireless Storage Explorer</td>
+                            <td>Wireless Storage Explorer & Drag-and-Drop</td>
                             <td class="highlight-col"><span class="check-icon">✓</span> Yes (Drag & Drop)</td>
                             <td><span class="cross-icon">✕</span> Requires MTP cable</td>
-                            <td><span class="cross-icon">✕</span> No</td>
+                            <td><span class="cross-icon">✕</span> Cloud upload required</td>
                         </tr>
                         <tr>
-                            <td>Swahili AI Smart Suggestions</td>
-                            <td class="highlight-col"><span class="check-icon">✓</span> Yes ("Hongera sana Aiseeee!!")</td>
-                            <td><span class="cross-icon">✕</span> No</td>
-                            <td><span class="cross-icon">✕</span> No</td>
-                        </tr>
-                        <tr>
-                            <td>Offline Local Data Storage</td>
+                            <td>Offline Local Privacy & Zero Cloud Dependency</td>
                             <td class="highlight-col"><span class="check-icon">✓</span> 100% Private Local</td>
                             <td><span class="check-icon">✓</span> Local</td>
-                            <td><span class="cross-icon">✕</span> Sent to Cloud Servers</td>
-                        </tr>
-                        <tr>
-                            <td>Instant Clipboard & Screenshot Sync</td>
-                            <td class="highlight-col"><span class="check-icon">✓</span> Yes</td>
-                            <td><span class="cross-icon">✕</span> Manual ADB commands</td>
-                            <td><span class="cross-icon">✕</span> Delayed</td>
+                            <td><span class="cross-icon">✕</span> Sent to corporate cloud</td>
                         </tr>
                     </tbody>
                 </table>
@@ -370,17 +651,20 @@
             <div class="cta-box reveal">
                 <h2 class="cta-title">Upgrade Your Mac & Android Workflow Today</h2>
                 <p class="cta-desc">
-                    Download DroidHouse v1.3 for macOS and install the companion APK on your Android device to experience seamless wireless integration.
+                    Download DroidHouse v1.6 for macOS and install the companion APK on your Android device to experience seamless wireless spatial integration.
                 </p>
                 <div class="cta-buttons">
-                    <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/DroidHouse_v1.3.dmg" class="btn-primary">
+                    <a href="downloads/DroidHouse_v1.6.dmg" class="btn-primary">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v10M18 8l-6 6-6-6M2 17l10 5 10-5"/></svg>
-                        Download DroidHouse_v1.3.dmg
+                        Download DroidHouse_v1.6.dmg
                     </a>
-                    <a href="https://github.com/festomanolo/droid-house/releases/download/v1.3/app-release.apk" class="btn-secondary">
+                    <a href="downloads/app-release.apk" class="btn-secondary">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                         Download app-release.apk
                     </a>
+                </div>
+                <div class="dl-meta" style="margin-top: 20px;">
+                    macOS 13.0+ (Ventura, Sonoma, Sequoia) • Android 10.0 to Android 15.0 • 100% Free & Private
                 </div>
             </div>
         </section>
@@ -390,9 +674,12 @@
     <footer class="footer">
         <div class="footer-logo">
             <img src="assets/droid-round.png" alt="DroidHouse" width="24" height="24">
-            <span>DroidHouse Ecosystem</span>
+            <span>DroidHouse Ecosystem • Tech-X</span>
         </div>
-        <p>© 2026 DroidHouse by Festo Manolo. Open-source software built for macOS and Android.</p>
+        <p>© 2026 DroidHouse. Made with ❤️ by <strong>festomanolo</strong> from <strong>Tech-X</strong>.</p>
+        <p style="margin-top: 10px; font-size: 0.85rem;">
+            Contact Developer: <a href="mailto:festomanolofm@gmail.com" style="color: var(--accent-blue); text-decoration: none; font-weight: 600;">festomanolofm@gmail.com</a>
+        </p>
         <p style="margin-top: 8px; font-size: 0.8rem;">
             <a href="https://github.com/festomanolo/droid-house" target="_blank" rel="noopener" style="color: var(--accent-blue); text-decoration: none;">GitHub Repository</a> | 
             <a href="https://github.com/festomanolo/droid-house/releases" target="_blank" rel="noopener" style="color: var(--accent-blue); text-decoration: none;">Release History</a>

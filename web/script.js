@@ -89,7 +89,7 @@ function initScrollReveal() {
 // Interactive Feature Showcase Tab Switcher
 function initShowcaseTabs() {
     const tabs = document.querySelectorAll('.showcase-tab');
-    const images = document.querySelectorAll('.showcase-img');
+    const items = document.querySelectorAll('.showcase-img, .showcase-mockup');
 
     tabs.forEach((tab) => {
         tab.addEventListener('click', () => {
@@ -99,13 +99,14 @@ function initShowcaseTabs() {
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
 
-            // Toggle Image Active State with scale transition
-            images.forEach(img => {
-                img.classList.remove('active');
-                if (img.id === targetId) {
-                    img.classList.add('active');
+            // Toggle View Item Active State with scale transition
+            items.forEach(item => {
+                item.classList.remove('active');
+                if (item.id === targetId) {
+                    item.classList.add('active');
                 }
             });
         });
     });
 }
+

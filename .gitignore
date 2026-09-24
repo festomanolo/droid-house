@@ -49,6 +49,7 @@ Podfile.lock
 .vscode/
 .claude/
 
-# Release DMGs & APKs (Store in GitHub Releases)
+# Release DMGs, APKs & Distribution Archives (Store in GitHub Releases)
 *.dmg
 *.apk
+*.zip

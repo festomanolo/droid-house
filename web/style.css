@@ -869,4 +869,491 @@ body {
     .splash-text {
         align-items: center;
     }
+
+    .remote-grid {
+        grid-template-columns: 1fr !important;
+    }
 }
+
+/* ==========================================
+   RELEASE 2.0 PILL & FEATURE HIGHLIGHTS
+   ========================================== */
+.badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 18px;
+    border-radius: 999px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    color: var(--accent-blue);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 24px;
+    box-shadow: 0 0 25px rgba(56, 189, 248, 0.25);
+    text-transform: uppercase;
+}
+
+.badge-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 10px #38bdf8;
+    animation: badgePulse 2s infinite ease-in-out;
+}
+
+@keyframes badgePulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.5; }
+}
+
+/* ==========================================
+   INTERACTIVE SHOWCASE MOCKUP VIEWS
+   ========================================== */
+.showcase-mockup {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transform: scale(0.95);
+    transition: opacity 0.45s ease, transform 0.6s var(--ease-apple);
+    pointer-events: none;
+}
+
+.showcase-mockup.active {
+    opacity: 1;
+    transform: scale(1);
+    position: relative;
+    pointer-events: auto;
+}
+
+/* Trackpad Mockup */
+.mockup-phone-frame {
+    width: 100%;
+    max-width: 440px;
+    min-height: 480px;
+    background: linear-gradient(145deg, #0e1626 0%, #070b14 100%);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 28px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 45px rgba(56, 189, 248, 0.18);
+    position: relative;
+    overflow: hidden;
+}
+
+.phone-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.phone-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.phone-status-pill {
+    font-size: 0.72rem;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #34d399;
+    font-weight: 600;
+}
+
+.trackpad-surface {
+    flex: 1;
+    margin-top: 14px;
+    min-height: 320px;
+    background: radial-gradient(circle at 50% 45%, rgba(56, 189, 248, 0.08) 0%, rgba(15, 23, 42, 0.45) 100%);
+    border: 1px dashed rgba(56, 189, 248, 0.3);
+    border-radius: 20px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.touch-indicator {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(56, 189, 248, 0.95);
+    box-shadow: 0 0 24px #38bdf8;
+    position: absolute;
+    animation: touchFloat 4.5s ease-in-out infinite;
+}
+
+.touch-ripple {
+    position: absolute;
+    inset: -14px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(56, 189, 248, 0.6);
+    animation: touchRipplePulse 2s ease-out infinite;
+}
+
+@keyframes touchFloat {
+    0%, 100% { transform: translate(-35px, -20px); }
+    25% { transform: translate(45px, -35px); }
+    50% { transform: translate(50px, 35px); }
+    75% { transform: translate(-25px, 45px); }
+}
+
+@keyframes touchRipplePulse {
+    0% { transform: scale(0.6); opacity: 1; }
+    100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* 3D Cylindrical Scroll Wheel on Mockup */
+.mockup-scroll-wheel {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 34px;
+    height: 190px;
+    background: linear-gradient(90deg, #1e293b 0%, #334155 45%, #0f172a 100%);
+    border-radius: 17px;
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 25px rgba(56, 189, 248, 0.3), inset 0 0 10px rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    padding: 8px 0;
+    overflow: hidden;
+}
+
+.wheel-notch {
+    width: 22px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 2px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    animation: wheelScrollMotion 2.5s ease-in-out infinite alternate;
+}
+
+.wheel-notch.active {
+    background: var(--accent-blue);
+    box-shadow: 0 0 8px #38bdf8;
+}
+
+@keyframes wheelScrollMotion {
+    0% { transform: translateY(-10px); }
+    100% { transform: translateY(10px); }
+}
+
+.gesture-badges {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    right: 52px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.gesture-badge {
+    font-size: 0.72rem;
+    padding: 4px 9px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Tailscale WAN Mockup */
+.mockup-tailscale-frame {
+    width: 100%;
+    max-width: 480px;
+    background: linear-gradient(145deg, #090e18 0%, #0c1220 100%);
+    border: 1px solid rgba(99, 102, 241, 0.45);
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(99, 102, 241, 0.22);
+}
+
+.wan-nodes-map {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 28px 0;
+    position: relative;
+}
+
+.wan-line {
+    position: absolute;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: linear-gradient(90deg, #38bdf8 0%, #6366f1 50%, #10b981 100%);
+    box-shadow: 0 0 10px #6366f1;
+    z-index: 1;
+}
+
+.wan-packet {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 14px #38bdf8;
+    top: -4px;
+    animation: packetTransit 2.5s infinite linear;
+}
+
+@keyframes packetTransit {
+    0% { left: 0%; opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+}
+
+.wan-node {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.node-icon {
+    width: 58px;
+    height: 58px;
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-blue);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+}
+
+.node-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.node-sub {
+    font-size: 0.72rem;
+    color: var(--accent-cyan);
+}
+
+.wan-auth-card {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* Studio Cam Mockup */
+.mockup-studio-frame {
+    width: 100%;
+    max-width: 480px;
+    background: #05080f;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    border-radius: 24px;
+    padding: 22px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(16, 185, 129, 0.18);
+}
+
+.studio-viewfinder {
+    width: 100%;
+    height: 240px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, #03060c 90%);
+    border-radius: 16px;
+    border: 1px dashed rgba(16, 185, 129, 0.35);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.rec-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rec-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: badgePulse 1.2s infinite ease-in-out;
+}
+
+.lens-controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.lens-btn {
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.lens-btn.active {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.5);
+    color: #34d399;
+}
+
+/* ==========================================
+   REMOTE CONTROL SPOTLIGHT SECTION
+   ========================================== */
+.remote-spotlight-section {
+    background: radial-gradient(ellipse at 50% 50%, rgba(14, 28, 54, 0.4) 0%, transparent 75%);
+    position: relative;
+}
+
+.remote-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+    margin-top: 48px;
+}
+
+.remote-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-glass);
+    border-radius: 24px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.4s var(--ease-apple);
+    backdrop-filter: blur(20px);
+}
+
+.remote-card:hover {
+    border-color: var(--border-glass-bright);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.25);
+    transform: translateY(-4px);
+}
+
+.remote-card-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.remote-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(56, 189, 248, 0.14);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-blue);
+}
+
+.remote-card-title {
+    font-family: var(--font-heading);
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.remote-card-desc {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 20px;
+}
+
+.remote-card-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.1);
+    padding: 4px 12px;
+    border-radius: 8px;
+    align-self: flex-start;
+}
+
+/* Download details badge */
+.dl-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+    font-weight: 500;
+}
+
+.attribution-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 22px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    margin-top: 24px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+
+.attribution-banner strong {
+    color: var(--text-primary);
+}
+
+.attribution-banner a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.attribution-banner a:hover {
+    text-decoration: underline;
+}
+
