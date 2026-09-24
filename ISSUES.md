@@ -289,5 +289,24 @@ This document tracks system issues identified, analyzed, and resolved across mac
   3. **Collapsible Floating CRD Glass Pill:** A floating semi-transparent toolbar provides instant access to mode toggle, zoom pads, keyboard drawer, fullscreen exit, and frame refresh.
   4. **Complete Mac System Shortcuts:** Expanded virtual keyboard bar with quick chips for `⌘+⌥+Esc` (Force Quit), `⌘+Space` (Spotlight), `⌘+Tab` (Apps), `⌘+W` (Close Window), `⌘+Q` (Quit App), `⌘+Z` (Undo), `⌘+C`/`⌘+V` (Copy/Paste), `⌘+A`, `⌘+S`, `Esc`, `Tab`, `Enter`, and `Backspace`.
 
+---
+
+### [Issue #017]: Non-Editable Security PIN Interface, Rigid 6-Digit Constraint, and Launch Overwrite in macOS Remote Host
+- **Status:** Closed / Resolved
+- **Severity:** Medium
+- **Component:** `MacRemoteAccessView.swift`, `MacRemoteControlHost.swift`, `MacRemoteControlScreen.kt`
+- **Symptom:**
+  Users could not directly edit or assign their desired custom security PIN or password in the macOS DroidHouse app. The PIN was presented as a read-only text view that required clicking a secondary button, which then enforced an overly strict 6-numeric-digits rule (`count == 6 && isSuperset(of: .decimalDigits)`). Attempting to use a standard password or 4/8-digit PIN was rejected, and any custom length was overwritten with a generated 6-digit number on application launch.
+- **Root Cause Analysis:**
+  1. `MacRemoteAccessView.swift` rendered the pairing PIN as an uneditable `Text` element instead of an interactive, focused `TextField`.
+  2. `MacRemoteControlHost.setCustomPin` required `trimmed.count == 6` and decimal digits only.
+  3. `MacRemoteControlHost.loadOrGeneratePin` checked `saved.count == 6`, causing any non-6-character custom password to be discarded upon restart.
+  4. `MacRemoteControlScreen.kt` on Android restricted user input to `length <= 6` and `KeyboardType.Number`, blocking alphanumeric passwords.
+- **Resolution:**
+  1. Upgraded `MacRemoteAccessView.swift` to feature a directly editable, inline interactive `TextField` with `Enter`/`Return` submission, "Save PIN" button with visual checkmark confirmation, and random generation shortcut.
+  2. Expanded `setCustomPin` and `loadOrGeneratePin` to support flexible custom PINs and passwords from 4 to 32 characters (`trimmed.count >= 4 && trimmed.count <= 32`), supporting alphanumeric and special characters.
+  3. Enhanced Android companion `MacRemoteControlScreen.kt` to allow up to 32 characters and switched to standard ASCII keyboard (`KeyboardType.Ascii`).
+  4. Hardened CGNAT Tailscale address detection in `MacRemoteControlHost.detectTailscaleIP()` to identify any `100.x.y.z` interface address directly.
+
 
 
