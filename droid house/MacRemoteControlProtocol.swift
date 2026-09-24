@@ -49,6 +49,9 @@ public enum MacRemoteProtocol {
         public let accessibilityGranted: Bool?
         public let screenCaptureGranted: Bool?
         public let pingId: Double?
+        public let cursorX: Double?
+        public let cursorY: Double?
+        public let cursorDown: Bool?
 
         public init(
             type: String,
@@ -61,7 +64,10 @@ public enum MacRemoteProtocol {
             timestamp: Double? = nil,
             accessibilityGranted: Bool? = nil,
             screenCaptureGranted: Bool? = nil,
-            pingId: Double? = nil
+            pingId: Double? = nil,
+            cursorX: Double? = nil,
+            cursorY: Double? = nil,
+            cursorDown: Bool? = nil
         ) {
             self.type = type
             self.success = success
@@ -74,6 +80,9 @@ public enum MacRemoteProtocol {
             self.accessibilityGranted = accessibilityGranted
             self.screenCaptureGranted = screenCaptureGranted
             self.pingId = pingId
+            self.cursorX = cursorX
+            self.cursorY = cursorY
+            self.cursorDown = cursorDown
         }
     }
 
@@ -122,5 +131,8 @@ public enum MacRemoteProtocol {
         case arrowDown = "arrow_down"
         case arrowLeft = "arrow_left"
         case arrowRight = "arrow_right"
+        case forceQuit = "force_quit"
+        case closeWindow = "close_window"
+        case quitApp = "quit_app"
     }
 }
