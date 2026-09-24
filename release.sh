@@ -6,9 +6,9 @@
 APP_NAME="droid house"
 SCHEME="droid house"
 BUILD_DIR="./build"
-DMG_NAME="DroidHouse_v1.5.dmg"
+DMG_NAME="DroidHouse_v1.6.dmg"
 
-echo "🚀 Starting Release Process for $APP_NAME v1.5..."
+echo "🚀 Starting Release Process for $APP_NAME v1.6..."
 
 # 1. Clean build directory
 echo "🧹 Cleaning build directory..."
