@@ -226,6 +226,8 @@ struct ContentView: View {
                     AeroCastView(adbService: adbService)
                 case .studioInput:
                     StudioCamView(adbService: adbService)
+                case .macRemote:
+                    MacRemoteAccessView()
                 case .roster:
                     RosterView(adbService: adbService)
                 case .clipboard:
@@ -242,7 +244,7 @@ struct ContentView: View {
                 switch selectedSection {
                 case .messages:
                     ContactsSidebarView(selectedContact: $selectedContact)
-                case .aeroCast, .roster, .transfers:
+                case .aeroCast, .studioInput, .roster, .transfers, .macRemote:
                     // These panes own their full canvas; the inspector would
                     // only steal width from them.
                     EmptyView()
