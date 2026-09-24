@@ -333,3 +333,24 @@ This document tracks system issues identified, analyzed, and resolved across mac
      - Linear Zone ($3.0 - 10.0$ px): $1.0\times$ to $1.35\times$ progressive tracking.
      - Dynamic Acceleration Zone ($10.0 - 24.0$ px): power-law exponent.
      - High-Velocity Flicks ($> 24.0$ px): logarithmic boost up to $3.85\times$ with 2-sample EMA jitter smoothing.
+
+---
+
+### [Issue #019]: Missing Tactile Vibration and Haptic Feedback on Android Companion (Samsung One UI / Android 15)
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `android-companion/AndroidManifest.xml`, `android-companion/MacRemoteControlScreen.kt`
+- **Symptom:**
+  When interacting with the Android companion trackpad gestures (1-finger click/double-click, 2-finger right-click tap, 3-finger Mission Control swipe, discrete click buttons) and the right-center tactile scroll wheel, no physical haptic vibrations were felt on the user's phone.
+- **Root Cause Analysis:**
+  1. **Missing `VIBRATE` Permission:** `<uses-permission android:name="android.permission.VIBRATE" />` was completely omitted from `android-companion/app/src/main/AndroidManifest.xml`. Because of this omission, every invocation of `vibrator.vibrate()` and `vibratorManager.vibrate()` was denied at the OS security sandbox layer (`java.lang.SecurityException: Neither user nor current process has android.permission.VIBRATE`), which was silently swallowed by `try { ... } catch (_: Exception) {}`.
+  2. **Unsupported Predefined Haptic Effects on Hardware:** The device motor (Samsung Galaxy S21, `MOTOR_LINEAR_1040`) reported `prebakedHapticPattern: false` in `dumpsys vibrator_manager`. Invoking `VibrationEffect.createPredefined(EFFECT_TICK)` or `EFFECT_CLICK` produced zero vibration because OEM prebaked haptic waveforms were not implemented or were suppressed by system touch volume policies.
+  3. **Lack of Hardware View-Level Haptics:** The application did not dispatch View-level haptic pulses (`targetView.performHapticFeedback`) with `FLAG_IGNORE_GLOBAL_SETTING`, leaving vibrations vulnerable to system-wide touch feedback disable toggles.
+- **Resolution:**
+  1. **Manifest Permission Declaration:** Added `<uses-permission android:name="android.permission.VIBRATE" />` to `AndroidManifest.xml`. Verified on the live device via ADB (`dumpsys package com.droidhouse.companion | grep -i vibrate` -> `granted=true`).
+  2. **Multi-Tier Physical Haptic Engine:**
+     - **Scroll Wheel Detent Tick (`triggerScrollNotchHaptic`):** Combines `targetView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK, FLAG_IGNORE_GLOBAL_SETTING or FLAG_IGNORE_VIEW_SETTING)` with a crisp, direct 16ms hardware motor pulse at high amplitude (230/255) and `USAGE_HARDWARE_FEEDBACK` (Android 13+). Added a 20ms debounce throttle so rapid scrolls do not cancel actuator pulses.
+     - **Trackpad Click & Shortcuts (`triggerHaptic`):** Uses `HapticFeedbackConstants.KEYBOARD_TAP` plus a firm 24ms full-amplitude motor pulse (255/255) for 1-finger taps, 2-finger right clicks, trackpad click buttons, and keyboard shortcut chips.
+     - **Mission Control Gesture (`triggerMissionControlHaptic`):** Generates a distinct double-bump waveform (`timings = [0, 30, 40, 35]`, `amplitudes = [0, 220, 0, 255]`) paired with `HapticFeedbackConstants.CONFIRM` for unambiguous gesture confirmation.
+     - **Activity DecorView Fallback:** Added recursive `Context.findActivity()` unwrapping so haptics resolve the window decorView regardless of Compose context wrapping.
+  3. **Build & Live Verification:** Compiled debug and release APKs (`app-release.apk`, 7.2MB) with Gradle 8.7, deployed to Samsung Galaxy S21 over ADB (`192.168.1.116:5555`), and confirmed permission grant and runtime feedback.

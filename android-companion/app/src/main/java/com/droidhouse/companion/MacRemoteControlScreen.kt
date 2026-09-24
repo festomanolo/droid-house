@@ -3,9 +3,12 @@ package com.droidhouse.companion
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.view.HapticFeedbackConstants
+import android.view.View
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
@@ -124,6 +127,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -616,6 +620,7 @@ private fun TrackpadPane(
     onToggleKeyboard: () -> Unit
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     var activeGestureHint by remember { mutableStateOf<String?>(null) }
     var lastTapTimestamp by remember { mutableLongStateOf(0L) }
 
@@ -670,7 +675,7 @@ private fun TrackpadPane(
                                     // Long-press detection (stationary > 500ms -> Right Click)
                                     if (!isLongPressFired && totalDist1 < 12f && (System.currentTimeMillis() - startTime >= 500L)) {
                                         isLongPressFired = true
-                                        triggerHaptic(context)
+                                        triggerHaptic(context, view)
                                         activeGestureHint = "Right Click"
                                         client.sendMouseClick("right")
                                     }
@@ -704,12 +709,12 @@ private fun TrackpadPane(
                                     // Swipe UP (accumulated negative deltaY) -> Mission Control
                                     if (!missionControlTriggered && threeFingerAccumY < -50f) {
                                         missionControlTriggered = true
-                                        triggerMissionControlHaptic(context)
+                                        triggerMissionControlHaptic(context, view)
                                         activeGestureHint = "⎋ Mission Control"
                                         client.sendSystemAction(MacRemoteProtocol.SystemAction.MISSION_CONTROL.rawValue)
                                     } else if (!showDesktopTriggered && threeFingerAccumY > 50f) {
                                         showDesktopTriggered = true
-                                        triggerMissionControlHaptic(context)
+                                        triggerMissionControlHaptic(context, view)
                                         activeGestureHint = "⌘ Show Desktop"
                                         client.sendSystemAction(MacRemoteProtocol.SystemAction.SHOW_DESKTOP.rawValue)
                                     }
@@ -720,7 +725,7 @@ private fun TrackpadPane(
                             // All fingers lifted
                             val elapsed = System.currentTimeMillis() - startTime
                             if (maxPointers == 1 && totalDist1 < 12f && !isLongPressFired && elapsed < 300) {
-                                triggerHaptic(context)
+                                triggerHaptic(context, view)
                                 val now = System.currentTimeMillis()
                                 if (now - lastTapTimestamp < 320) {
                                     client.sendMouseDoubleClick()
@@ -731,7 +736,7 @@ private fun TrackpadPane(
                                 }
                             } else if (maxPointers == 2 && twoFingerTapEligible && (System.currentTimeMillis() - twoFingerStartTime < 350)) {
                                 // Two-finger tap -> Right Click!
-                                triggerHaptic(context)
+                                triggerHaptic(context, view)
                                 activeGestureHint = "Right Click"
                                 client.sendMouseClick("right")
                             }
@@ -846,7 +851,7 @@ private fun TrackpadPane(
                             client.sendMouseScroll(0f, deltaY)
                         },
                         onNotchTick = {
-                            triggerScrollNotchHaptic(context)
+                            triggerScrollNotchHaptic(context, view)
                         }
                     )
                 }
@@ -891,7 +896,7 @@ private fun TrackpadPane(
                     .background(Color(0xFF1E2433))
                     .border(1.dp, Color.White.opacity(0.1f), RoundedCornerShape(12.dp))
                     .clickable(enabled = isConnected) {
-                        triggerHaptic(context)
+                        triggerHaptic(context, view)
                         client.sendMouseClick("left")
                     },
                 contentAlignment = Alignment.Center
@@ -913,7 +918,7 @@ private fun TrackpadPane(
                     .background(Color(0xFF1E2433))
                     .border(1.dp, Color.White.opacity(0.1f), RoundedCornerShape(12.dp))
                     .clickable(enabled = isConnected) {
-                        triggerHaptic(context)
+                        triggerHaptic(context, view)
                         client.sendMouseClick("right")
                     },
                 contentAlignment = Alignment.Center
@@ -1121,6 +1126,7 @@ private fun LiveDesktopPane(
     onToggleKeyboard: () -> Unit
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     var isCrdToolsExpanded by remember { mutableStateOf(false) }
 
     BoxWithConstraints(
@@ -1197,21 +1203,21 @@ private fun LiveDesktopPane(
                                 onTap = { offset ->
                                     val clickXRatio = ((offset.x - originX) / displayW).coerceIn(0f, 1f)
                                     val clickYRatio = ((offset.y - originY) / displayH).coerceIn(0f, 1f)
-                                    triggerHaptic(context)
+                                    triggerHaptic(context, view)
                                     client.sendMouseMoveAbs(clickXRatio, clickYRatio)
                                     client.sendMouseClick("left")
                                 },
                                 onDoubleTap = { offset ->
                                     val clickXRatio = ((offset.x - originX) / displayW).coerceIn(0f, 1f)
                                     val clickYRatio = ((offset.y - originY) / displayH).coerceIn(0f, 1f)
-                                    triggerHaptic(context)
+                                    triggerHaptic(context, view)
                                     client.sendMouseMoveAbs(clickXRatio, clickYRatio)
                                     client.sendMouseDoubleClick()
                                 },
                                 onLongPress = { offset ->
                                     val clickXRatio = ((offset.x - originX) / displayW).coerceIn(0f, 1f)
                                     val clickYRatio = ((offset.y - originY) / displayH).coerceIn(0f, 1f)
-                                    triggerHaptic(context)
+                                    triggerHaptic(context, view)
                                     client.sendMouseMoveAbs(clickXRatio, clickYRatio)
                                     client.sendMouseClick("right")
                                 }
@@ -1219,15 +1225,15 @@ private fun LiveDesktopPane(
                         } else {
                             detectTapGestures(
                                 onTap = {
-                                    triggerHaptic(context)
+                                    triggerHaptic(context, view)
                                     client.sendMouseClick("left")
                                 },
                                 onDoubleTap = {
-                                    triggerHaptic(context)
+                                    triggerHaptic(context, view)
                                     client.sendMouseDoubleClick()
                                 },
                                 onLongPress = {
-                                    triggerHaptic(context)
+                                    triggerHaptic(context, view)
                                     client.sendMouseClick("right")
                                 }
                             )
@@ -1712,6 +1718,9 @@ private fun MediaButton(
     isConnected: Boolean,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1722,7 +1731,10 @@ private fun MediaButton(
                 .clip(CircleShape)
                 .background(Color(0xFF1E2433))
                 .border(1.dp, Color.White.opacity(0.12f), CircleShape)
-                .clickable(enabled = isConnected, onClick = onClick),
+                .clickable(enabled = isConnected) {
+                    triggerHaptic(context, view)
+                    onClick()
+                },
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -1853,12 +1865,18 @@ private fun KeyShortcutChip(
     borderColor: Color = Color.White.copy(alpha = 0.12f),
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
+
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
             .background(backgroundColor)
             .border(1.dp, borderColor, RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
+            .clickable {
+                triggerHaptic(context, view)
+                onClick()
+            }
             .padding(horizontal = 7.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -1873,54 +1891,137 @@ private fun KeyShortcutChip(
     }
 }
 
-private fun triggerHaptic(context: Context) {
+private fun Context.findActivity(): android.app.Activity? {
+    var ctx: Context? = this
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is android.app.Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
+private fun triggerHaptic(context: Context, view: View? = null) {
     try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-            vibratorManager?.defaultVibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+        val targetView = view ?: context.findActivity()?.window?.decorView
+        targetView?.performHapticFeedback(
+            HapticFeedbackConstants.KEYBOARD_TAP,
+            HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING or HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+        )
+    } catch (_: Exception) { }
+
+    try {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vm?.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
-            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            @Suppress("DEPRECATION")
-            vibrator?.vibrate(20)
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val effect = VibrationEffect.createOneShot(24L, 255)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val attrs = VibrationAttributes.Builder()
+                        .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
+                        .build()
+                    vibrator.vibrate(effect, attrs)
+                } else {
+                    vibrator.vibrate(effect)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(24L)
+            }
         }
     } catch (_: Exception) { }
 }
 
-private fun triggerScrollNotchHaptic(context: Context) {
+private var lastNotchTickTimestamp = 0L
+
+private fun triggerScrollNotchHaptic(context: Context, view: View? = null) {
+    val now = System.currentTimeMillis()
+    if (now - lastNotchTickTimestamp < 20L) return
+    lastNotchTickTimestamp = now
+
     try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-            vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+        val targetView = view ?: context.findActivity()?.window?.decorView
+        targetView?.performHapticFeedback(
+            HapticFeedbackConstants.CLOCK_TICK,
+            HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING or HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+        )
+    } catch (_: Exception) { }
+
+    try {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vm?.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
-            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            @Suppress("DEPRECATION")
-            vibrator?.vibrate(10)
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val effect = VibrationEffect.createOneShot(16L, 230)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val attrs = VibrationAttributes.Builder()
+                        .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
+                        .build()
+                    vibrator.vibrate(effect, attrs)
+                } else {
+                    vibrator.vibrate(effect)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(16L)
+            }
         }
     } catch (_: Exception) { }
 }
 
-private fun triggerMissionControlHaptic(context: Context) {
+private fun triggerMissionControlHaptic(context: Context, view: View? = null) {
     try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-            vibrator?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
+        val targetView = view ?: context.findActivity()?.window?.decorView
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            targetView?.performHapticFeedback(
+                HapticFeedbackConstants.CONFIRM,
+                HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING or HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+            )
+        } else {
+            targetView?.performHapticFeedback(
+                HapticFeedbackConstants.LONG_PRESS,
+                HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING or HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+            )
+        }
+    } catch (_: Exception) { }
+
+    try {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vm?.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
-            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            @Suppress("DEPRECATION")
-            vibrator?.vibrate(35)
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val timings = longArrayOf(0, 30, 40, 35)
+                val amplitudes = intArrayOf(0, 220, 0, 255)
+                val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val attrs = VibrationAttributes.Builder()
+                        .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
+                        .build()
+                    vibrator.vibrate(effect, attrs)
+                } else {
+                    vibrator.vibrate(effect)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(65L)
+            }
         }
     } catch (_: Exception) { }
 }
