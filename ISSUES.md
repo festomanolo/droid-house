@@ -242,5 +242,52 @@ This document tracks system issues identified, analyzed, and resolved across mac
   2. Surfaced one-tap address copying directly in `MacRemoteAccessView.swift` so the user can easily connect from anywhere in the world using Tailscale without opening router ports.
   3. Enforced 6-digit challenge-response PIN authentication over encrypted WebSocket sessions to protect the Mac against WAN port scanning.
 
+---
+
+### [Issue #014]: Real-Time Pointer & Vector Hardware Cursor Invisibility in Remote Frame Capture
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `MacRemoteControlHost.swift`, `MacRemoteClient.kt`, `MacRemoteControlScreen.kt`
+- **Symptom:**
+  When viewing the live macOS desktop stream on the Android phone, the mouse cursor was completely invisible. Users could not see what UI elements they were hovering over or where clicks would land.
+- **Root Cause Analysis:**
+  macOS Quartz display capture APIs (`CGWindowListCreateImage` / `CGDisplayCreateImage`) deliberately exclude the hardware mouse cursor layer from the rendered frame bitmap to maintain compositor performance. As a result, captured frame buffers contain only background windows without the cursor icon.
+- **Resolution:**
+  Implemented a dual-layer real-time cursor engine:
+  1. **Host-Side Vector Drawing in Frame Pipeline:** Before JPEG compression in `MacRemoteControlHost.swift`, `drawMacCursor(in:context:at:scale:)` queries `CGEvent(source: nil)?.location` and renders a crisp Quartz vector cursor with black stroke, white fill, and drop shadow directly into the frame bitmap context.
+  2. **Sub-Millisecond 60 Hz Telemetry & Header Protocol:** Added 16-byte binary frame headers (`[12..13]: cursorX`, `[14..15]: cursorY`) and high-frequency `cursor_pos` WebSocket events at 60 Hz.
+  3. **Client-Side Vector Canvas Overlay:** The Android companion app decodes cursor telemetry in `MacRemoteClient.kt` and renders an exact vector macOS arrow on the Jetpack Compose `Canvas` with an animated pulsing halo during clicks, completely bypassing video encoding latency.
+
+---
+
+### [Issue #015]: Chrome Remote Desktop Parity: Zoom Pads, Aspect-Ratio Coordinate Mapping, and Viewport Auto-Follow
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `MacRemoteControlScreen.kt`, `MacRemoteClient.kt`
+- **Symptom:**
+  Remote Mac desktops have 16:10 or 16:9 aspect ratios (e.g. 2560x1600 or 1920x1080), while modern Android phones feature tall 20:9 or 21:9 displays. When fit to screen, desktop text and small controls are hard to read. Without zoom navigation and coordinate normalization, touches landed on incorrect Mac UI targets.
+- **Root Cause Analysis:**
+  Standard letterboxing creates horizontal or vertical dead zones. Without affine coordinate translation that factors in `fitScale`, `zoomScale`, and `panOffset`, touch events sent raw screen coordinates to the host, missing targets by hundreds of pixels.
+- **Resolution:**
+  1. **Zoom Engine & Dedicated Zoom Pads:** Added an interactive zoom engine supporting scales from 1.0x to 5.0x with dedicated on-screen floating zoom buttons (`[-]`, `[Fit]`, `[1:1]`, `[+]`) and live zoom percentage readout.
+  2. **Bidirectional Coordinate Normalization:** Implemented mathematical coordinate translation mapping touch offsets `(touchX, touchY)` through `originX = (boxWidth - displayW)/2 + panX` to normalized ratios `[0.0, 1.0]`.
+  3. **Viewport Auto-Follow:** When zoomed in Trackpad mode, an active boundary watcher smoothly pans the viewport when the cursor approaches screen margins, ensuring the cursor is never lost outside the visible viewport.
+
+---
+
+### [Issue #016]: Edge-to-Edge Borderless Fullscreen and Dual Input Engine (Trackpad vs Direct Touch) for Mobile Remote Desktop
+- **Status:** Closed / Resolved
+- **Severity:** High
+- **Component:** `MacRemoteControlScreen.kt`, `MacRemoteProtocol.kt`, `MacRemoteControlHost.swift`
+- **Symptom:**
+  Remote desktop viewers often lock users into either trackpad or touchscreen mode, frustrating users who need precision mouse movement for menus and direct tapping for keyboards. Furthermore, mobile system bars and top navigation bars wasted valuable vertical screen real estate.
+- **Root Cause Analysis:**
+  Trackpad mode (relative delta $dx, dy$) is ideal for micro-precision, while Direct Touch mode (absolute ratio $x, y$) is ideal for fast taps. A single hardcoded input model cannot serve both workflows well.
+- **Resolution:**
+  1. **Dual Input Engine:** Added a 1-tap mode switch between **Trackpad Mode** (relative swiping, tap to click, double-tap, long-press right click) and **Direct Touch Mode** (direct tap, drag to select, long-press right click at touch coordinate).
+  2. **100% Borderless Immersive Fullscreen:** Tapping the `[⛶]` button hides navigation tabs, top bars, and system padding, granting the desktop 100% of the phone's physical display.
+  3. **Collapsible Floating CRD Glass Pill:** A floating semi-transparent toolbar provides instant access to mode toggle, zoom pads, keyboard drawer, fullscreen exit, and frame refresh.
+  4. **Complete Mac System Shortcuts:** Expanded virtual keyboard bar with quick chips for `⌘+⌥+Esc` (Force Quit), `⌘+Space` (Spotlight), `⌘+Tab` (Apps), `⌘+W` (Close Window), `⌘+Q` (Quit App), `⌘+Z` (Undo), `⌘+C`/`⌘+V` (Copy/Paste), `⌘+A`, `⌘+S`, `Esc`, `Tab`, `Enter`, and `Backspace`.
+
 
 
