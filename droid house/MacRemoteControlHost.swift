@@ -944,13 +944,12 @@ public final class MacRemoteControlHost: ObservableObject {
             let addrFamily = interface.ifa_addr.pointee.sa_family
 
             if addrFamily == UInt8(AF_INET) {
-                let name = String(cString: interface.ifa_name)
                 var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                 getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len),
                             &hostname, socklen_t(hostname.count),
                             nil, socklen_t(0), NI_NUMERICHOST)
                 let ip = String(cString: hostname)
-                if (name.hasPrefix("utun") || name.hasPrefix("tailscale")) && ip.hasPrefix("100.") {
+                if ip.hasPrefix("100.") {
                     return ip
                 }
             }
@@ -986,7 +985,7 @@ public final class MacRemoteControlHost: ObservableObject {
 
     public func setCustomPin(_ newPin: String) -> Bool {
         let trimmed = newPin.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count == 6, CharacterSet.decimalDigits.isSuperset(of: CharacterSet(charactersIn: trimmed)) else {
+        guard trimmed.count >= 4 && trimmed.count <= 32 else {
             return false
         }
         UserDefaults.standard.set(trimmed, forKey: "droidhouse_mac_remote_pin")
@@ -998,7 +997,7 @@ public final class MacRemoteControlHost: ObservableObject {
     }
 
     private func loadOrGeneratePin() {
-        if let saved = UserDefaults.standard.string(forKey: "droidhouse_mac_remote_pin"), saved.count == 6 {
+        if let saved = UserDefaults.standard.string(forKey: "droidhouse_mac_remote_pin"), saved.count >= 4, saved.count <= 32 {
             pairingPin = saved
         } else {
             regeneratePin()
