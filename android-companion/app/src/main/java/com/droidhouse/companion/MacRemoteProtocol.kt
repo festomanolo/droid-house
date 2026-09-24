@@ -54,7 +54,10 @@ object MacRemoteProtocol {
         val timestamp: Double? = null,
         val accessibilityGranted: Boolean? = null,
         val screenCaptureGranted: Boolean? = null,
-        val pingId: Double? = null
+        val pingId: Double? = null,
+        val cursorX: Double? = null,
+        val cursorY: Double? = null,
+        val cursorDown: Boolean? = null
     )
 
     enum class SystemAction(val rawValue: String) {
@@ -89,7 +92,10 @@ object MacRemoteProtocol {
         ARROW_UP("arrow_up"),
         ARROW_DOWN("arrow_down"),
         ARROW_LEFT("arrow_left"),
-        ARROW_RIGHT("arrow_right")
+        ARROW_RIGHT("arrow_right"),
+        FORCE_QUIT("force_quit"),
+        CLOSE_WINDOW("close_window"),
+        QUIT_APP("quit_app")
     }
 
     // Message Constructors
