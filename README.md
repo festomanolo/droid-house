@@ -102,13 +102,22 @@ Apple built the **Walled Garden** to keep you trapped into buying iPhones. If yo
 - **Native Mac Capture**: Instant high-res photo snapshots (PNG to Pictures), 60 FPS video recording with synced audio (MP4 to Movies), and uncompressed studio audio-only recording (WAV to Music).
 - **CoreMediaIO Virtual Webcam**: Hardware-accelerated VideoToolbox decompression into raw CVPixelBuffers for system webcam feeds.
 
+### 🎮 **6. Long-Distance Mac Remote Control (Trackpad, Keyboard, Live Desktop & Media)**
+- **Anywhere in the World**: Remotely control your Mac even when far away via cellular data or public Wi-Fi using zero-configuration Tailscale mesh (`100.x.y.z`) or direct WAN port forwarding.
+- **Precision Virtual Trackpad**: Smooth cursor motion with velocity acceleration ($v^{1.15}$), 1-finger tap left click, 2-finger tap right click, 2-finger scroll, double-tap drag, and tactile glass buttons.
+- **Remote Keyboard & Quick Shortcuts**: Direct unicode typing + Mac modifier toggles (`⌘ Cmd`, `⌥ Opt`, `⌃ Ctrl`, `⇧ Shift`), and instant shortcut chips (`⌘+Space` Spotlight, `⌘+Tab` App Switcher, `⌘+C`, `⌘+V`, `⌘+Z`, `⌘+A`).
+- **Live Desktop View**: Low-latency Quartz screen streaming over encrypted WebSockets with touch-to-click coordinate translation.
+- **Media & Power Remote**: Volume, brightness, media playback, Display Sleep, System Sleep, and Screen Lock.
+- **Enterprise-Grade Security**: Challenge-response 6-digit PIN authentication prevents unauthorized access over WAN.
+
 ---
 
 ## 📦 **Latest Release**
 
 | Version | Highlights & Changes | macOS Download | Android Download |
 | :--- | :--- | :---: | :---: |
-| **`v1.5`** *(Latest)* | **Studio Camera & Microphone Input, BoomAudio Routing & Media Capture**<br />• CoreAudio automatic routing to BoomAudio virtual mic for Zoom, Teams, and Meet.<br />• Triple-lens switching: Ultra-Wide (0.5x), Main (1.0x), and Telephoto (3.0x) with continuous 10x zoom & torch.<br />• Native Mac capture suite: High-res snapshots (Pictures), 60 FPS video + audio (Movies), and studio WAV (Music).<br />• Hardware-accelerated VideoToolbox decoding and CoreMediaIO virtual webcam support. | [Download DMG (v1.5)](https://github.com/festomanolo/droid-house/releases/download/v1.5/DroidHouse_v1.5.dmg) | [Download APK (v1.5)](https://github.com/festomanolo/droid-house/releases/download/v1.5/app-debug.apk) |
+| **`v1.6`** *(Latest)* | **Mac Remote Control (Trackpad, Keyboard, Live Desktop & Media over WAN)**<br />• Remote Trackpad with cursor acceleration, 2-finger scroll, and tactile buttons.<br />• Live desktop streaming with touch-to-click coordinate dispatch.<br />• Remote Keyboard & macOS shortcuts (Spotlight, App Switcher, Media keys).<br />• Multi-tier WAN connectivity: Tailscale WireGuard mesh & Public WAN support.<br />• Secure 6-digit challenge PIN authentication. | [Download DMG (v1.6)](https://github.com/festomanolo/droid-house/releases/download/v1.6/DroidHouse_v1.6.dmg) | [Download APK (v1.6)](https://github.com/festomanolo/droid-house/releases/download/v1.6/app-release.apk) |
+| **`v1.5`** | **Studio Camera & Microphone Input, BoomAudio Routing & Media Capture**<br />• CoreAudio automatic routing to BoomAudio virtual mic for Zoom, Teams, and Meet.<br />• Triple-lens switching: Ultra-Wide (0.5x), Main (1.0x), and Telephoto (3.0x).<br />• Native Mac capture suite: High-res snapshots, 60 FPS video + audio, studio WAV. | [Download DMG (v1.5)](https://github.com/festomanolo/droid-house/releases/download/v1.5/DroidHouse_v1.5.dmg) | [Download APK (v1.5)](https://github.com/festomanolo/droid-house/releases/download/v1.5/app-debug.apk) |
 
 ---
 
