@@ -10,6 +10,17 @@ DMG_NAME="DroidHouse_v1.6.dmg"
 
 echo "🚀 Starting Release Process for $APP_NAME v1.6..."
 
+# 0. Check Developer Authorization
+if [ ! -f "droid house/DeveloperConfig.swift" ]; then
+    echo "================================================================================"
+    echo "❌ [PROPRIETARY BUILD ERROR]: DroidHouse Developer Authorization Missing!"
+    echo "Unauthorized repository clone detected. Compilation is strictly prohibited"
+    echo "without an authorized Developer License key from Tech-X."
+    echo "Contact: festomanolofm@gmail.com"
+    echo "================================================================================"
+    exit 1
+fi
+
 # 1. Clean build directory
 echo "🧹 Cleaning build directory..."
 rm -rf "$BUILD_DIR"

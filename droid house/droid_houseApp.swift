@@ -12,7 +12,7 @@ struct droid_houseApp: App {
     init() {
         // Enforce Developer Authorization check on app launch
         guard DeveloperConfig.validateLicense() else {
-            fatalError("CRITICAL: Proprietary DroidHouse Developer Key Missing or Invalid. Unauthorized clone detected. Contact festomanolo on GitHub.")
+            fatalError("CRITICAL: Proprietary DroidHouse Developer Key Missing or Invalid. Unauthorized clone detected. Contact festomanolofm@gmail.com.")
         }
     }
 

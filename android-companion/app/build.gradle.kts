@@ -94,3 +94,27 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
 
+// MARK: - Proprietary Repository Build-Lock Guard
+// Enforces that repository clones cannot be built without Tech-X Developer Authorization.
+tasks.register("verifyDeveloperBuildAuthorization") {
+    doFirst {
+        val devConfigFile = file("src/main/java/com/droidhouse/companion/DeveloperConfig.kt")
+        if (!devConfigFile.exists()) {
+            throw GradleException(
+                """
+                ================================================================================
+                [PROPRIETARY BUILD ERROR]: DroidHouse Developer Authorization Missing!
+                Unauthorized repository clone detected. Compilation is strictly prohibited
+                without an authorized Developer License key from Tech-X.
+                Contact: festomanolofm@gmail.com
+                ================================================================================
+                """.trimIndent()
+            )
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("verifyDeveloperBuildAuthorization")
+}
+

@@ -226,7 +226,7 @@ struct SettingsView: View {
             }
             
             VStack(spacing: 8) {
-                Text("festomanolo")
+                Text("Tech-X")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(
                         LinearGradient(
@@ -236,12 +236,12 @@ struct SettingsView: View {
                         )
                     )
                 
-                Text("Lead Developer & Visionary")
-                    .font(.subheadline)
+                Text("Made by festomanolo from Tech-X")
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
             
-            Text("Building the future of Android management on macOS. Passionate about clean code, high performance, and premium user experiences.")
+            Text("Building the future of Android management and remote spatial control on macOS. High-performance device bridging, native CoreAudio routing, and ultra-low latency desktop streaming.")
                 .font(.system(size: 14))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.primary)
@@ -251,19 +251,14 @@ struct SettingsView: View {
             Spacer()
             
             HStack(spacing: 16) {
-                Link(destination: URL(string: "https://github.com/festomanolo")!) {
-                    Label("GitHub", systemImage: "link")
+                Link(destination: URL(string: "mailto:festomanolofm@gmail.com")!) {
+                    Label("festomanolofm@gmail.com", systemImage: "envelope.fill")
                 }
-                .buttonStyle(.bordered)
-                
-                Link(destination: URL(string: "https://twitter.com/festomanolo")!) {
-                    Label("Twitter", systemImage: "link")
-                }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
             }
-            .controlSize(.small)
+            .controlSize(.regular)
             
-            Text("Version 1.2.0 • Made with ❤️ in 2026")
+            Text("Version 2.0 • Made by festomanolo from Tech-X • 2026")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 20)

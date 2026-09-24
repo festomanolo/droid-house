@@ -159,7 +159,7 @@ fun MacRemoteControlScreen(
     val context = LocalContext.current
     val client = remember { MacRemoteClient.shared }
 
-    var hostText by remember { mutableStateOf(client.getSavedHost(context).ifEmpty { "192.168.1.116" }) }
+    var hostText by remember { mutableStateOf(client.getSavedHost(context)) }
     var portText by remember { mutableStateOf(client.getSavedPort(context).toString()) }
     var pinText by remember { mutableStateOf(client.getSavedPin(context)) }
 
@@ -573,6 +573,38 @@ private fun ConnectionCard(
                     ) {
                         Text(if (connectionState == MacRemoteClient.ConnectionState.CONNECTING) "Connecting…" else "Connect to Mac", fontSize = 12.sp)
                     }
+                }
+            }
+
+            // Tech-X Developer Attribution & Contact
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Made by festomanolo from Tech-X",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = Color.White.opacity(0.6f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                    Text(
+                        text = "festomanolofm@gmail.com",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = Color(0xFF38BDF8).opacity(0.85f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
                 }
             }
         }
