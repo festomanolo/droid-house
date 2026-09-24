@@ -10,6 +10,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
     case clipboard = "Clipboard Sync"
     case screenshots = "Screenshots"
     case transfers = "Transfers"
+    case macRemote = "Mac Remote Control"
 
     var id: String { rawValue }
 
@@ -23,6 +24,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .clipboard: return "doc.on.clipboard.fill"
         case .screenshots: return "photo.on.rectangle.angled"
         case .transfers: return "arrow.up.arrow.down.circle"
+        case .macRemote: return "laptopcomputer.and.iphone"
         }
     }
 
@@ -36,6 +38,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .clipboard: return .orange
         case .screenshots: return .purple
         case .transfers: return .cyan
+        case .macRemote: return .dhAccentBlue
         }
     }
 
@@ -50,6 +53,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .clipboard: return "Two-way clipboard bridge"
         case .screenshots: return "Live screenshot gallery"
         case .transfers: return "Active and past file transfers"
+        case .macRemote: return "Control Mac from Android APK over WAN/LAN"
         }
     }
 
@@ -57,7 +61,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
     /// paired with the file inspector.
     var usesInspector: Bool {
         switch self {
-        case .aeroCast, .studioInput, .roster, .transfers: return false
+        case .aeroCast, .studioInput, .roster, .transfers, .macRemote: return false
         default: return true
         }
     }
