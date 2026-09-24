@@ -10,6 +10,9 @@ import AppKit
 struct MacRemoteAccessView: View {
     @ObservedObject var host: MacRemoteControlHost = MacRemoteControlHost.shared
     @State private var copiedItem: String?
+    @State private var isEditingPin = false
+    @State private var customPinInput = ""
+    @State private var pinErrorMessage: String? = nil
 
     var body: some View {
         ScrollView {
@@ -170,12 +173,34 @@ struct MacRemoteAccessView: View {
                 // Tailscale / Zero-Config WAN
                 if let tailscaleIP = host.tailscaleIPAddress {
                     addressRow(
-                        title: "Tailscale IP (Recommended for WAN)",
-                        subtitle: "Works anywhere across cellular & different Wi-Fi networks",
+                        title: "Permanent Tailscale IP (Recommended for WAN)",
+                        subtitle: "Static address — never changes across reboots, cellular, or Wi-Fi networks",
                         value: "\(tailscaleIP):\(host.port)",
-                        badge: "WAN Direct",
+                        badge: "Permanent WAN",
                         badgeColor: .blue
                     )
+                } else {
+                    // Tailscale Guide Callout
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "network")
+                                .foregroundStyle(Color.blue)
+                            Text("Permanent Remote Tunnel (Access from anywhere in the world)")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Spacer()
+                            Link("Get Tailscale (Free)", destination: URL(string: "https://tailscale.com/download")!)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.blue)
+                        }
+
+                        Text("To control your Mac from outside your house (on 4G/5G or foreign Wi-Fi), install Tailscale on this Mac and on your Android phone using the same login. Your Mac will get a permanent static IP (100.x.y.z) that never changes!")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.blue.opacity(0.1)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.25), lineWidth: 1)))
                 }
 
                 // Local Network
@@ -201,50 +226,96 @@ struct MacRemoteAccessView: View {
 
             Divider().padding(.vertical, 4)
 
-            // Security PIN Section
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Security Pairing PIN")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+            // Security PIN Section (Permanent Password)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text("Permanent Security PIN")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Text("Permanent")
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.green.opacity(0.2)))
+                                .foregroundStyle(Color.green)
+                        }
 
-                    Text("Only companion devices with this PIN can control your Mac.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        Text("Saved permanently in macOS settings. Never changes unless you edit it.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: 8) {
+                        Text(host.pairingPin)
+                            .font(.system(size: 22, weight: .bold, design: .monospaced))
+                            .tracking(3)
+                            .foregroundStyle(Color.dhAccentMint)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.black.opacity(0.6))
+                                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.dhAccentMint.opacity(0.4), lineWidth: 1))
+                            )
+
+                        Button {
+                            copyToClipboard(host.pairingPin, label: "PIN")
+                        } label: {
+                            Image(systemName: copiedItem == "PIN" ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 12))
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Copy PIN to clipboard")
+
+                        Button {
+                            customPinInput = host.pairingPin
+                            isEditingPin.toggle()
+                        } label: {
+                            Label(isEditingPin ? "Cancel" : "Change PIN", systemImage: "pencil")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button {
+                            host.regeneratePin()
+                        } label: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 12))
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Generate new random 6-digit PIN")
+                    }
                 }
 
-                Spacer()
+                if isEditingPin {
+                    HStack(spacing: 10) {
+                        TextField("Enter 6-digit PIN", text: $customPinInput)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 13, design: .monospaced))
+                            .frame(width: 140)
 
-                HStack(spacing: 8) {
-                    Text(host.pairingPin)
-                        .font(.system(size: 22, weight: .bold, design: .monospaced))
-                        .tracking(3)
-                        .foregroundStyle(Color.dhAccentMint)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.black.opacity(0.6))
-                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.dhAccentMint.opacity(0.4), lineWidth: 1))
-                        )
+                        Button("Save Permanent PIN") {
+                            if host.setCustomPin(customPinInput) {
+                                isEditingPin = false
+                                pinErrorMessage = nil
+                            } else {
+                                pinErrorMessage = "PIN must be exactly 6 digits (0-9)."
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
 
-                    Button {
-                        copyToClipboard(host.pairingPin, label: "PIN")
-                    } label: {
-                        Image(systemName: copiedItem == "PIN" ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 12))
+                        if let err = pinErrorMessage {
+                            Text(err)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.red)
+                        }
                     }
-                    .buttonStyle(.bordered)
-                    .help("Copy PIN to clipboard")
-
-                    Button {
-                        host.regeneratePin()
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 12))
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Generate new random PIN")
+                    .padding(.top, 4)
                 }
             }
         }
