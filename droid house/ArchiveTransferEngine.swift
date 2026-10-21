@@ -224,11 +224,16 @@ final class ArchiveTransferEngine: ObservableObject {
 
         done.notify(queue: .main) { [weak self] in
             errPipe.fileHandleForReading.readabilityHandler = nil
-            try? sink.close()
-            let status = proc.terminationStatus
-            Task { @MainActor [weak self] in
-                self?.lastArchiveURL = destination
-                self?.completePull(status: status, destination: destination)
+            let status = process.terminationStatus
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if self.phase == .cancelled {
+                    // A cut-off tar looks valid until extraction fails halfway.
+                    try? FileManager.default.removeItem(at: destination)
+                    return
+                }
+                self.lastArchiveURL = destination
+                self.completePull(status: status, destination: destination)
             }
         }
 
