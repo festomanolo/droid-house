@@ -110,6 +110,21 @@ struct MainExplorerView: View {
                 keyMonitor = nil
             }
         }
+        .onChange(of: adbService.currentPath) { _, _ in
+            // Selections refer to the folder they were made in.
+            selectedFileIDs.removeAll()
+        }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { adbService.operationError != nil },
+                set: { if !$0 { adbService.operationError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { adbService.operationError = nil }
+        } message: {
+            Text(adbService.operationError ?? "")
+        }
         .quickLookPreview($previewURL)
     }
 
