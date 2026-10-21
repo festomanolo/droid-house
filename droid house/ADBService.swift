@@ -193,6 +193,11 @@ class ADBService: ObservableObject {
     
     // MARK: - File Operations
     
+    /// Bumped per listing so a slow response for a folder the user already
+    /// left can't overwrite the folder they're looking at now.
+    private var listGeneration = 0
+    private var lastStorageFetch: (serial: String, date: Date)?
+
     func listFiles(path: String) async {
         guard let device = selectedDevice else {
             lastError = "No device selected"
