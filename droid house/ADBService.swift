@@ -231,8 +231,6 @@ class ADBService: ObservableObject {
             lastError = "Failed to list files: \(error.localizedDescription)"
             currentFiles = []
         }
-        
-        await fetchStorageInfo(device: device)
         isLoading = false
     }
     
