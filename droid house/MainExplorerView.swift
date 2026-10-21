@@ -342,6 +342,11 @@ struct MainExplorerView: View {
                             PhotoCell(
                                 file: file,
                                 isSelected: selectedFileIDs.contains(file.id),
+                                onOpen: { handleOpen(file) },
+                                onSelect: { handleSelect(file, extending: $0) },
+                                contextMenu: { contextMenuContent(for: file) },
+                                adbService: adbService
+                            )
                     VStack(alignment: .leading, spacing: 12) {
                         Text(formatDate(date))
                             .font(.headline)
