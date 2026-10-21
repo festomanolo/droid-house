@@ -63,7 +63,9 @@ class ADBService: ObservableObject {
             return
         }
 
-        connectedDevices = devices
+        // This runs every 4 s. Assigning an identical array still fires
+        // objectWillChange, which re-rendered the whole window each tick.
+        if devices != connectedDevices { connectedDevices = devices }
 
         // Selected device vanished from the list.
         if let current = selectedDevice, !devices.contains(where: { $0.id == current.id }) {
