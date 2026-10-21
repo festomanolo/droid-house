@@ -148,6 +148,7 @@ class ADBService: ObservableObject {
         }
 
         if let device = selectedDevice {
+            lastStorageFetch = (device.id, Date())
             await fetchStorageInfo(device: device)
         }
         
