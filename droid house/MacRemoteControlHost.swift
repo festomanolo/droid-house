@@ -54,6 +54,13 @@ public final class MacRemoteControlHost: ObservableObject {
     private let networkQueue = DispatchQueue(label: "com.droidhouse.remote.network", qos: .userInteractive)
     private let screenQueue = DispatchQueue(label: "com.droidhouse.remote.screen", qos: .userInitiated)
 
+    /// One frame may be captured, encoded or sitting in the send buffer at a
+    /// time. The timer used to enqueue a capture every tick regardless, so on
+    /// a large display (or a slow Tailscale/WAN link) frames piled up behind
+    /// each other: latency grew by the second and the CPU stayed pegged.
+    private let frameGateLock = NSLock()
+    private var frameInFlight = false
+
     public static let shared = MacRemoteControlHost()
 
     public init() {
@@ -184,6 +191,7 @@ public final class MacRemoteControlHost: ObservableObject {
         stopScreenStreaming()
         stopCursorMonitoring()
         activeConnection = nil
+        releaseFrameGate()
         DispatchQueue.main.async {
             self.connectedClientName = nil
             self.connectedClientIP = nil
@@ -379,11 +387,20 @@ public final class MacRemoteControlHost: ObservableObject {
         connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
     }
 
-    public func sendBinaryData(_ data: Data) {
-        guard let connection = activeConnection else { return }
+    /// - Parameter sent: Called once the network stack has taken the data
+    ///   (or the send failed), which is the backpressure signal for streaming.
+    public func sendBinaryData(_ data: Data, sent: (() -> Void)? = nil) {
+        guard let connection = activeConnection else {
+            sent?()
+            return
+        }
         let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
         let context = NWConnection.ContentContext(identifier: "binary", metadata: [metadata])
-        connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
+        if let sent {
+            connection.send(content: data, contentContext: context, isComplete: true, completion: .contentProcessed { _ in sent() })
+        } else {
+            connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
+        }
     }
 
     // MARK: - CoreGraphics Event Synthesis
@@ -765,11 +782,21 @@ public final class MacRemoteControlHost: ObservableObject {
     public func captureAndSendSingleFrame() {
         guard isClientAuthenticated, activeConnection != nil else { return }
 
+        frameGateLock.lock()
+        if frameInFlight {
+            frameGateLock.unlock()
+            return // Drop this tick; the previous frame is still on its way.
+        }
+        frameInFlight = true
+        frameGateLock.unlock()
+
         let scale = self.streamScale
         let quality = self.streamQuality
 
         screenQueue.async { [weak self] in
             guard let self = self else { return }
+            var handedOff = false
+            defer { if !handedOff { self.releaseFrameGate() } }
 
             guard let cgImage = self.captureDesktopCGImage() else { return }
 
@@ -838,8 +865,15 @@ public final class MacRemoteControlHost: ObservableObject {
             packet.append(Data(bytes: &curY, count: 2))
             packet.append(jpegData)
 
-            self.sendBinaryData(packet)
+            handedOff = true
+            self.sendBinaryData(packet) { [weak self] in self?.releaseFrameGate() }
         }
+    }
+
+    private func releaseFrameGate() {
+        frameGateLock.lock()
+        frameInFlight = false
+        frameGateLock.unlock()
     }
 
     private func drawMacCursor(in context: CGContext, at point: CGPoint, scale: CGFloat) {
