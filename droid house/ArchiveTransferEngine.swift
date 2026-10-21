@@ -242,6 +242,8 @@ final class ArchiveTransferEngine: ObservableObject {
             phase = .streaming
             appendLog("Streaming tar archive over exec-out…", isError: false)
         } catch {
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
             try? sink.close()
             finish(.failed("Failed to launch adb: \(error.localizedDescription)"))
         }
