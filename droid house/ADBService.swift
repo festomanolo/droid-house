@@ -106,7 +106,7 @@ class ADBService: ObservableObject {
         refreshTask = nil
     }
     
-    struct StorageInfo: Identifiable, Codable {
+    struct StorageInfo: Identifiable, Codable, Equatable {
         let id: String
         let label: String
         let total: String
