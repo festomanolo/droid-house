@@ -169,17 +169,6 @@ final class ArchiveTransferEngine: ObservableObject {
         phase = .idle
     }
 
-    /// Configures a process to run adb, falling back to `/usr/bin/env` for PATH
-    /// resolution when only the bare "adb" name is available.
-    private nonisolated static func configure(_ process: Process, adb: String, arguments: [String]) {
-        if adb.hasPrefix("/") {
-            process.executableURL = URL(fileURLWithPath: adb)
-            process.arguments = arguments
-        } else {
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [adb] + arguments
-        }
-    }
 
     // MARK: - Pull (device -> Mac)
 
