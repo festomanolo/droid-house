@@ -380,9 +380,11 @@ struct MainExplorerView: View {
         let today = Date()
         if dateStr == Self.dayFormatter.string(from: today) { return "Today" }
         if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today),
-        if dateStr == today { return "Today" }
-        // For simplicity, just return the string or a more friendly format if needed
-        return dateStr
+           dateStr == Self.dayFormatter.string(from: yesterday) {
+            return "Yesterday"
+        }
+        guard let date = Self.dayFormatter.date(from: dateStr) else { return dateStr }
+        return date.formatted(date: .complete, time: .omitted)
     }
 
     private var iconGrid: some View {
