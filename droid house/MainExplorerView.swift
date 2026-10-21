@@ -502,7 +502,7 @@ struct MainExplorerView: View {
                 }
             }
             Button("Duplicate\(suffix)") {
-                Task { try? await adbService.duplicateFiles(targets) }
+                runOperation("duplicate") { try await adbService.duplicateFiles(targets) }
             }
 
             Divider()
