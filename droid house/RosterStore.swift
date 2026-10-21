@@ -418,15 +418,6 @@ final class RosterStore: ObservableObject {
     private func runADB(_ arguments: [String], timeout: TimeInterval) async throws -> String {
         let output = try await ADBProcess.run(adb: adbPath, arguments: arguments, timeout: timeout)
         guard output.status == 0 else { throw ADBError.commandFailed(output.errorText) }
-                        let message = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                        resumeOnce {
-                            continuation.resume(
-                                throwing: ADBError.commandFailed(
-                                    message.trimmingCharacters(in: .whitespacesAndNewlines)
-                                )
-                            )
-                        }
-                    } else {
                         resumeOnce {
                             continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
                         }
