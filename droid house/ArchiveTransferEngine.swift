@@ -251,6 +251,7 @@ final class ArchiveTransferEngine: ObservableObject {
 
     private func completePull(status: Int32, destination: URL) {
         guard isRunning || phase == .streaming else { return } // ignore if already cancelled
+        sampleRate()
         if status == 0 {
             phase = .finalizing
             let attrSize = (try? FileManager.default.attributesOfItem(atPath: destination.path))?[.size] as? Int64
