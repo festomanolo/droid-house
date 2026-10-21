@@ -102,6 +102,12 @@ final class ArchiveTransferEngine: ObservableObject {
     private var startDate: Date?
     private var lastSampleBytes: Int64 = 0
 
+    /// Bytes moved so far, written from pipe callbacks and read by the
+    /// sampler. Publishing per chunk queued one main-actor task and one
+    /// SwiftUI update for every 64 KB — hundreds of thousands for a large
+    /// backup, which is what made the window stutter during transfers.
+    private let counter = ByteCounter()
+
     // MARK: - Init
 
     init() {
