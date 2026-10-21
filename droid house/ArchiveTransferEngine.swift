@@ -359,6 +359,7 @@ final class ArchiveTransferEngine: ObservableObject {
     private func beginSampling() {
         startDate = Date()
         lastSampleBytes = 0
+        lastSampleDate = Date()
         sampler?.cancel()
         sampler = Task { [weak self] in
             while !Task.isCancelled {
