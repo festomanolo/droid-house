@@ -333,11 +333,7 @@ class ADBService: ObservableObject {
     func listDirectories(at path: String) async -> [RemoteFile] {
         guard let device = selectedDevice else { return [] }
         do {
-            var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(Self.shellQuote(path))"), timeout: 20)
-            if output.contains("No such file") || output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                output = try await runADBCommand(shellArguments(device: device, "ls -la \(Self.shellQuote(path))"), timeout: 20)
-            }
-            return parseFileList(output, basePath: path)
+            return try await listing(device: device, path: path)
                 .filter { $0.isDirectory }
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         } catch {
