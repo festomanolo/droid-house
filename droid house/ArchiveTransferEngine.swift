@@ -201,7 +201,7 @@ final class ArchiveTransferEngine: ObservableObject {
         done.enter() // process exit
 
         // Stream stdout (raw tar bytes) straight to disk, counting as we go.
-        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else {
                 handle.readabilityHandler = nil
