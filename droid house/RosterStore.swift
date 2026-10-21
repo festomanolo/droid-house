@@ -416,61 +416,8 @@ final class RosterStore: ObservableObject {
     // MARK: ADB
 
     private func runADB(_ arguments: [String], timeout: TimeInterval) async throws -> String {
-        let adb = adbPath
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = [adb] + arguments
-
-                let pipe = Pipe()
-                let errorPipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = errorPipe
-
-                let lock = NSLock()
-                var didResume = false
-                func resumeOnce(_ block: () -> Void) {
-                    lock.lock(); defer { lock.unlock() }
-                    guard !didResume else { return }
-                    didResume = true
-                    block()
-                }
-
-                let timer = DispatchSource.makeTimerSource(queue: .global())
-                timer.schedule(deadline: .now() + timeout)
-                timer.setEventHandler {
-                    if process.isRunning { process.terminate() }
-                    resumeOnce { continuation.resume(throwing: ADBError.timedOut(timeout)) }
-                }
-                timer.resume()
-
-                do {
-                    try process.run()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    timer.cancel()
-
-                    if process.terminationStatus != 0 {
-                        let message = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                        resumeOnce {
-                            continuation.resume(
-                                throwing: ADBError.commandFailed(
-                                    message.trimmingCharacters(in: .whitespacesAndNewlines)
-                                )
-                            )
-                        }
-                    } else {
-                        resumeOnce {
-                            continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-                        }
-                    }
-                } catch {
-                    timer.cancel()
-                    resumeOnce { continuation.resume(throwing: ADBError.processError(error.localizedDescription)) }
-                }
-            }
-        }
+        let output = try await ADBProcess.run(adb: adbPath, arguments: arguments, timeout: timeout)
+        guard output.status == 0 else { throw ADBError.commandFailed(output.errorText) }
+        return output.stdoutString
     }
 }

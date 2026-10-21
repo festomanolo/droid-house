@@ -877,28 +877,8 @@ final class AeroCastEngine: NSObject, ObservableObject {
     // MARK: - ADB helper
 
     private func runADB(_ arguments: [String]) async -> String? {
-        let adb = adbPath
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = [adb] + arguments
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = Pipe()
-                do {
-                    try process.run()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    guard process.terminationStatus == 0 else {
-                        continuation.resume(returning: nil)
-                        return
-                    }
-                    continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-                } catch {
-                    continuation.resume(returning: nil)
-                }
-            }
-        }
+        guard let output = try? await ADBProcess.run(adb: adbPath, arguments: arguments),
+              output.status == 0 else { return nil }
+        return output.stdoutString
     }
 }
