@@ -48,7 +48,7 @@ class ThumbnailManager: ObservableObject {
     
     @MainActor
     func getThumbnail(for file: RemoteFile, adbService: ADBService) -> NSImage? {
-        let cacheKey = "\(file.id.uuidString)_\(file.modifiedDate.hashValue)"
+        let cacheKey = "\(file.id)_\(file.modifiedDate.hashValue)"
         
         // 1. Check memory (Fastest)
         if let cached = memoryCache.object(forKey: cacheKey as NSString) {
@@ -322,7 +322,7 @@ class ThumbnailManager: ObservableObject {
         
         // Prefetch a generous window so the grid fills in ahead of scrolling.
         for file in imageFiles.prefix(48) {
-            let cacheKey = "\(file.id.uuidString)_\(file.modifiedDate.hashValue)"
+            let cacheKey = "\(file.id)_\(file.modifiedDate.hashValue)"
             
             // Skip if already in memory or being fetched
             if memoryCache.object(forKey: cacheKey as NSString) != nil { continue }

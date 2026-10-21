@@ -31,8 +31,8 @@ struct MainExplorerView: View {
     @Binding var uploadStatusText: String
     @Binding var selectedFile: RemoteFile?
 
-    @State private var hoveredFileID: UUID?
-    @State private var selectedFileIDs: Set<UUID> = []
+    @State private var hoveredFileID: RemoteFile.ID?
+    @State private var selectedFileIDs: Set<RemoteFile.ID> = []
     @State private var showNewFolderSheet = false
     @State private var newFolderName = ""
     @State private var showDeleteConfirm = false
