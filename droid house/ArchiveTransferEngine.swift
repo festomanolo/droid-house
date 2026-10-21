@@ -370,6 +370,8 @@ final class ArchiveTransferEngine: ObservableObject {
         }
     }
 
+    private var lastSampleDate = Date()
+
     private func sampleRate() {
         guard let start = startDate else { return }
         elapsed = Date().timeIntervalSince(start)
