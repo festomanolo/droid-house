@@ -737,6 +737,7 @@ struct MainExplorerView: View {
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.writeObjects([tempFile as NSURL])
+            } catch is CancellationError {
             } catch {
                 adbService.lastError = "Failed to copy: \(error.localizedDescription)"
             }
