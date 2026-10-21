@@ -191,6 +191,14 @@ final class ArchiveTransferEngine: ObservableObject {
         process.standardError = errPipe
 
         worker = process
+        let counter = self.counter
+
+        // The archive is complete only once stdout has hit EOF *and* adb has
+        // exited. Finishing on exit alone closed the file while the last
+        // buffered chunks were still in the pipe, truncating the archive.
+        let done = DispatchGroup()
+        done.enter() // stdout EOF
+        done.enter() // process exit
 
         // Stream stdout (raw tar bytes) straight to disk, counting as we go.
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
