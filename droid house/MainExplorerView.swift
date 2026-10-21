@@ -375,8 +375,11 @@ struct MainExplorerView: View {
     }()
 
     private func formatDate(_ dateStr: String) -> String {
-        // Assume YYYY-MM-DD
-        let today = String(Date().description.prefix(10))
+        // `Date().description` is UTC, so "Today" used to be wrong for part of
+        // every day outside UTC. Compare in the local calendar instead.
+        let today = Date()
+        if dateStr == Self.dayFormatter.string(from: today) { return "Today" }
+        if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today),
         if dateStr == today { return "Today" }
         // For simplicity, just return the string or a more friendly format if needed
         return dateStr
