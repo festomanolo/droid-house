@@ -365,7 +365,7 @@ final class ArchiveTransferEngine: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let self else { return }
-                await MainActor.run { self.sampleRate() }
+                self.sampleRate()
             }
         }
     }
