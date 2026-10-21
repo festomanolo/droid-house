@@ -356,6 +356,7 @@ struct MainExplorerView: View {
                         Text(formatDate(date))
                             .font(.headline)
                             .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
                         
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 2)], spacing: 2) {
