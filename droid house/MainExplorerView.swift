@@ -337,6 +337,11 @@ struct MainExplorerView: View {
             // laid out far more cells than were on screen.
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 2)], alignment: .leading, spacing: 2) {
                 ForEach(sortedKeys, id: \.self) { date in
+                    Section {
+                        ForEach(grouped[date] ?? []) { file in
+                            PhotoCell(
+                                file: file,
+                                isSelected: selectedFileIDs.contains(file.id),
                     VStack(alignment: .leading, spacing: 12) {
                         Text(formatDate(date))
                             .font(.headline)
