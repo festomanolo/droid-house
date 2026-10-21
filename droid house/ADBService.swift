@@ -131,7 +131,6 @@ class ADBService: ObservableObject {
     // MARK: - Device Management
     
     func detectDevices() async {
-        isLoading = true
         lastError = nil
         
         do {
