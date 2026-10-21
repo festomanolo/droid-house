@@ -374,10 +374,13 @@ final class ArchiveTransferEngine: ObservableObject {
 
     private func sampleRate() {
         guard let start = startDate else { return }
-        elapsed = Date().timeIntervalSince(start)
-        let delta = bytesTransferred - lastSampleBytes
-        // 500ms window -> multiply by 2 for per-second rate, smoothed.
-        let instantaneous = Double(delta) * 2.0
+        let now = Date()
+        elapsed = now.timeIntervalSince(start)
+        let total = counter.value
+        if total != bytesTransferred { bytesTransferred = total }
+        let window = now.timeIntervalSince(lastSampleDate)
+        guard window > 0.05 else { return }
+        let instantaneous = Double(total - lastSampleBytes) / window
         bytesPerSecond = bytesPerSecond == 0 ? instantaneous : (bytesPerSecond * 0.6 + instantaneous * 0.4)
         lastSampleBytes = bytesTransferred
     }
