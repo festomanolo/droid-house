@@ -597,7 +597,7 @@ struct MainExplorerView: View {
                 }
             } catch is CancellationError {
             } catch {
-                adbService.lastError = "Failed to copy: \(error.localizedDescription)"
+                adbService.operationError = "Couldn't copy to the Mac: \(error.localizedDescription)"
             }
         }
     }
