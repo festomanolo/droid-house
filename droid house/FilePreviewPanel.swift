@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import QuickLookThumbnailing
+import ImageIO
 
 struct FilePreviewPanel: View {
     let file: RemoteFile?
@@ -38,11 +39,16 @@ struct FilePreviewPanel: View {
         }
         .frame(minWidth: 260, idealWidth: 280, maxWidth: 320)
         .background(VisualEffectView(material: .sidebar, blendingMode: .behindWindow))
-        .onChange(of: file) { _, newFile in
+        // .task(id:) cancels the previous preview (and the adb pull behind it)
+        // as soon as the selection moves on. The old onChange + Task version
+        // let every clicked file finish downloading, and whichever finished
+        // last won, even if it was no longer the selected file.
+        .task(id: file?.id) {
             thumbnailImage = nil
             localPreviewURL = nil
-            if let f = newFile {
-                loadPreview(for: f)
+            isDownloadingPreview = false
+            if let file {
+                await loadPreview(for: file)
             }
         }
     }
@@ -163,44 +169,59 @@ struct FilePreviewPanel: View {
         }
     }
     
-    private func loadPreview(for file: RemoteFile) {
+    /// Inline previews stream the whole file over adb, so anything bigger
+    /// than this is left to Quick Look on demand rather than downloaded just
+    /// because it was clicked.
+    private static let maxInlinePreviewBytes: Int64 = 80 * 1024 * 1024
+
+    private func loadPreview(for file: RemoteFile) async {
         guard !file.isDirectory else { return }
-        
+
         let ext = (file.name as NSString).pathExtension.lowercased()
-        let previewableExtensions = ["jpg", "jpeg", "png", "gif", "heic", "webp", "mp4", "mov", "mkv", "mp3", "m4a", "wav"]
-        
-        guard previewableExtensions.contains(ext) else { return }
-        
+        let previewableExtensions = ["jpg", "jpeg", "png", "gif", "heic", "webp", "mp4", "mov", "mkv", "m4v", "mp3", "m4a", "wav"]
+
+        guard previewableExtensions.contains(ext), file.size <= Self.maxInlinePreviewBytes else { return }
+
         isDownloadingPreview = true
-        
-        Task {
-            let tempDir = FileManager.default.temporaryDirectory
-            let localPath = tempDir.appendingPathComponent(file.name)
-            
-            do {
-                try await adbService.pullFile(remotePath: file.fullPath, localPath: localPath.path)
-                
-                await MainActor.run {
-                    localPreviewURL = localPath
-                    isDownloadingPreview = false
-                    
-                    // Generate thumbnail for images
-                    if ["jpg", "jpeg", "png", "gif", "heic", "webp"].contains(ext) {
-                        if let image = NSImage(contentsOf: localPath) {
-                            thumbnailImage = image
-                        }
-                    } else if ["mp4", "mov", "mkv", "m4v"].contains(ext) {
-                        generateVideoThumbnail(url: localPath)
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isDownloadingPreview = false
-                }
-            }
+        defer { isDownloadingPreview = false }
+
+        // A folder per file path, so a file that's still open in the player
+        // is never overwritten by a different file that shares its name.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DroidHouse-Preview", isDirectory: true)
+            .appendingPathComponent(String(file.fullPath.hashValue, radix: 36), isDirectory: true)
+        let localPath = dir.appendingPathComponent(file.name)
+
+        do {
+            // Untracked: browsing the inspector shouldn't flood the
+            // transfer pill and history with downloads the user never asked for.
+            try await adbService.pullFile(remotePath: file.fullPath, localPath: localPath.path, tracksProgress: false)
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+
+        localPreviewURL = localPath
+
+        if ["jpg", "jpeg", "png", "gif", "heic", "webp"].contains(ext) {
+            // Decode a display-sized copy off the main thread; loading a
+            // full 50 MP photo with NSImage(contentsOf:) stalled the UI.
+            let image = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+                guard let source = CGImageSourceCreateWithURL(localPath as CFURL, nil),
+                      let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                          kCGImageSourceCreateThumbnailFromImageAlways: true,
+                          kCGImageSourceCreateThumbnailWithTransform: true,
+                          kCGImageSourceThumbnailMaxPixelSize: 900
+                      ] as CFDictionary) else { return nil }
+                return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            }.value
+            guard !Task.isCancelled else { return }
+            thumbnailImage = image
+        } else if ["mp4", "mov", "mkv", "m4v"].contains(ext) {
+            generateVideoThumbnail(url: localPath)
         }
     }
-    
+
     private func generateVideoThumbnail(url: URL) {
         let request = QLThumbnailGenerator.Request(
             fileAt: url,
