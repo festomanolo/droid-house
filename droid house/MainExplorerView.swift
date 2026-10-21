@@ -583,9 +583,14 @@ struct MainExplorerView: View {
     private func copyFilesToMac(_ files: [RemoteFile]) {
         Task {
             do {
+                // A fresh folder per copy: two same-named files from different
+                // folders used to overwrite each other in the shared temp dir.
                 let tempDir = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("DroidHouse-Copy-\(UUID().uuidString)", isDirectory: true)
                 var urls: [NSURL] = []
-                for file in files where !file.isDirectory {
+                // Folders included: adb pulls them recursively and Finder
+                // pastes them like any other folder.
+                for file in files {
                     let tempFile = tempDir.appendingPathComponent(file.name)
                     try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
                     urls.append(tempFile as NSURL)
@@ -726,48 +731,9 @@ struct MainExplorerView: View {
         }
     }
     
-    private func copyToMac(_ file: RemoteFile) {
-        Task {
-            do {
-                let tempDir = FileManager.default.temporaryDirectory
-                let tempFile = tempDir.appendingPathComponent(file.name)
-                try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
-                
-                // Copy to pasteboard
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.writeObjects([tempFile as NSURL])
-            } catch is CancellationError {
-            } catch {
-                adbService.operationError = "Couldn't copy to the Mac: \(error.localizedDescription)"
-            }
-        }
-    }
-    
     private func copySelectedToMac() {
         guard !selectedFileIDs.isEmpty else { return }
-        
-        Task {
-            do {
-                let tempDir = FileManager.default.temporaryDirectory
-                var urls: [NSURL] = []
-                
-                for file in selectedFiles where !file.isDirectory {
-                    let tempFile = tempDir.appendingPathComponent(file.name)
-                    try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
-                    urls.append(tempFile as NSURL)
-                }
-                
-                if !urls.isEmpty {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.writeObjects(urls)
-                }
-            } catch is CancellationError {
-            } catch {
-                adbService.operationError = "Couldn't copy to the Mac: \(error.localizedDescription)"
-            }
-        }
+        copyFilesToMac(selectedFiles)
     }
     
     /// Builds a drag payload that lazily pulls the file(s) off the device and
