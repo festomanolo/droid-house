@@ -904,6 +904,7 @@ struct MainExplorerView: View {
     }
     
     private func deleteSelectedFiles() {
+        let targets = selectedFiles
         Task {
             try? await adbService.deleteFiles(selectedFiles)
             selectedFileIDs.removeAll()
