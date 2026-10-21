@@ -335,8 +335,7 @@ final class ArchiveTransferEngine: ObservableObject {
                 } catch {
                     break // pipe closed (process ended / cancelled)
                 }
-                let count = Int64(chunk.count)
-                Task { @MainActor [weak self] in self?.advance(by: count) }
+                counter.add(Int64(chunk.count))
             }
             try? writeHandle.close()
             try? reader.close()
