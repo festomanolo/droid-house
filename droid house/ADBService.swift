@@ -151,8 +151,6 @@ class ADBService: ObservableObject {
             lastStorageFetch = (device.id, Date())
             await fetchStorageInfo(device: device)
         }
-        
-        isLoading = false
     }
     
     private func parseDevices(_ output: String) -> [ADBDevice] {
