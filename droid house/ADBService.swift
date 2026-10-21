@@ -132,7 +132,7 @@ class ADBService: ObservableObject {
     
     func detectDevices() async {
         lastError = nil
-        
+
         do {
             let output = try await runADBCommand(["devices", "-l"])
             connectedDevices = parseDevices(output)
