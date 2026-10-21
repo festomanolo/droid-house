@@ -123,7 +123,10 @@ struct ADBDevice: Identifiable, Hashable {
 }
 
 struct RemoteFile: Identifiable, Hashable {
-    let id = UUID()
+    /// The device path is the identity. A fresh UUID per listing made SwiftUI
+    /// rebuild every cell on each refresh, dropped the selection whenever the
+    /// folder reloaded, and defeated the thumbnail cache.
+    var id: String { fullPath }
     let name: String
     let isDirectory: Bool
     let size: Int64
