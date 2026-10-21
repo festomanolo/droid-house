@@ -757,7 +757,8 @@ class ADBService: ObservableObject {
     func fetchStorageInfo(device: ADBDevice) async {
         do {
             let output = try await runADBCommand(["-s", device.id, "shell", "df", "-h"])
-            self.storageInfo = parseStorage(output)
+            let info = parseStorage(output)
+            if info != storageInfo { storageInfo = info }
         } catch {
             print("Failed to fetch storage info: \(error)")
         }
