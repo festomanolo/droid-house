@@ -860,7 +860,7 @@ struct MainExplorerView: View {
                 previewURL = tempFile
             } catch is CancellationError {
             } catch {
-                adbService.lastError = "Failed to preview: \(error.localizedDescription)"
+                adbService.operationError = "Couldn't preview “\(file.name)”: \(error.localizedDescription)"
             }
         }
     }
