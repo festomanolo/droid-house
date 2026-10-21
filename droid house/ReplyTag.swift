@@ -143,6 +143,36 @@ enum ReplyTag {
         }
     }
 
+    /// Quote resolution for a whole thread in one pass, keyed by message id.
+    ///
+    /// Calling `resolveQuotedMessage` per bubble rescans and re-normalises
+    /// every earlier message, which is quadratic, and the thread re-renders on
+    /// each keystroke in the composer. Exact quotes are found by dictionary
+    /// lookup; only truncated quotes (rare) fall back to a backwards scan.
+    static func resolveQuotedMessages(in thread: [SMSMessage]) -> [String: SMSMessage] {
+        var resolved: [String: SMSMessage] = [:]
+        var latestByBody: [String: SMSMessage] = [:]
+        var normalisedSoFar: [(String, SMSMessage)] = []
+        normalisedSoFar.reserveCapacity(thread.count)
+
+        for message in thread {
+            if let parsed = parse(message.body) {
+                let needle = normalise(parsed.quote)
+                if !needle.isEmpty {
+                    if parsed.quoteWasTruncated {
+                        resolved[message.id] = normalisedSoFar.last { $0.0.hasPrefix(needle) }?.1
+                    } else {
+                        resolved[message.id] = latestByBody[needle]
+                    }
+                }
+            }
+            let hay = normalise(displayBody(message.body))
+            latestByBody[hay] = message
+            normalisedSoFar.append((hay, message))
+        }
+        return resolved
+    }
+
     private static func normalise(_ text: String) -> String {
         text.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
