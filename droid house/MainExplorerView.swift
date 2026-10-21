@@ -358,10 +358,6 @@ struct MainExplorerView: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
-                        
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 2)], spacing: 2) {
-                            ForEach(grouped[date] ?? []) { file in
-                                PhotoCell(
                                     file: file,
                                     isSelected: selectedFileIDs.contains(file.id),
                                     onOpen: { handleOpen(file) },
