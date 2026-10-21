@@ -877,13 +877,7 @@ final class AeroCastEngine: NSObject, ObservableObject {
     // MARK: - ADB helper
 
     private func runADB(_ arguments: [String]) async -> String? {
-        let adb = adbPath
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = [adb] + arguments
-                let pipe = Pipe()
+        guard let output = try? await ADBProcess.run(adb: adbPath, arguments: arguments),
                 process.standardOutput = pipe
                 process.standardError = Pipe()
                 do {
