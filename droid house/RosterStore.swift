@@ -417,16 +417,6 @@ final class RosterStore: ObservableObject {
 
     private func runADB(_ arguments: [String], timeout: TimeInterval) async throws -> String {
         let output = try await ADBProcess.run(adb: adbPath, arguments: arguments, timeout: timeout)
-                    block()
-                }
-
-                let timer = DispatchSource.makeTimerSource(queue: .global())
-                timer.schedule(deadline: .now() + timeout)
-                timer.setEventHandler {
-                    if process.isRunning { process.terminate() }
-                    resumeOnce { continuation.resume(throwing: ADBError.timedOut(timeout)) }
-                }
-                timer.resume()
 
                 do {
                     try process.run()
