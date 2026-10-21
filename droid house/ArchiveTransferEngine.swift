@@ -356,10 +356,6 @@ final class ArchiveTransferEngine: ObservableObject {
 
     // MARK: - Progress plumbing
 
-    private func advance(by count: Int64) {
-        bytesTransferred += count
-    }
-
     private func beginSampling() {
         startDate = Date()
         lastSampleBytes = 0
