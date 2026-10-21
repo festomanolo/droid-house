@@ -358,10 +358,7 @@ struct MainExplorerView: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
-                                    file: file,
-                                    isSelected: selectedFileIDs.contains(file.id),
-                                    onOpen: { handleOpen(file) },
-                                    onSelect: { handleSelect(file, extending: $0) },
+                            .padding(.top, 22)
                                     contextMenu: { contextMenuContent(for: file) },
                                     adbService: adbService
                                 )
