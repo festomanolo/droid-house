@@ -135,8 +135,9 @@ class ADBService: ObservableObject {
 
         do {
             let output = try await runADBCommand(["devices", "-l"])
-            connectedDevices = parseDevices(output)
-            
+            let devices = parseDevices(output)
+            if devices != connectedDevices { connectedDevices = devices }
+
             // Auto-select first device if none selected
             if selectedDevice == nil, let first = connectedDevices.first {
                 selectedDevice = first
