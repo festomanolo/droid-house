@@ -219,6 +219,15 @@ class ADBService: ObservableObject {
         do {
             result = .success(try await listing(device: device, path: path))
         } catch {
+            result = .failure(error)
+        }
+
+        guard generation == listGeneration else { return }
+
+        switch result {
+        case .success(let files):
+            if files != currentFiles { currentFiles = files }
+        case .failure(let error):
             lastError = "Failed to list files: \(error.localizedDescription)"
             currentFiles = []
         }
