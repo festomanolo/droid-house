@@ -683,7 +683,7 @@ class ADBService: ObservableObject {
             let chunk = paths[start..<min(start + 100, paths.count)].joined(separator: " ")
             _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(chunk)"), timeout: 120)
         }
-        
+
         await listFiles(path: currentPath)
     }
     
