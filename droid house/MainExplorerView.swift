@@ -330,10 +330,12 @@ struct MainExplorerView: View {
             String(file.modifiedDate.prefix(10))
         }
         let sortedKeys = grouped.keys.sorted(by: >)
-                    String(file.modifiedDate.prefix(10))
-                }
-                let sortedKeys = grouped.keys.sorted(by: >)
-                
+
+        return ScrollView {
+            // One lazy grid with a section per day. A lazy grid per day inside
+            // a plain VStack defeated the laziness, so a large camera folder
+            // laid out far more cells than were on screen.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 2)], alignment: .leading, spacing: 2) {
                 ForEach(sortedKeys, id: \.self) { date in
                     VStack(alignment: .leading, spacing: 12) {
                         Text(formatDate(date))
