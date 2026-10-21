@@ -305,8 +305,11 @@ class ADBService: ObservableObject {
             ))
         }
         
-        // Sort based on current sortOrder
-        files.sort { a, b in
+        return sortFiles(files)
+    }
+
+    private func sortFiles(_ files: [RemoteFile]) -> [RemoteFile] {
+        files.sorted { a, b in
             if a.isDirectory != b.isDirectory {
                 return a.isDirectory
             }
