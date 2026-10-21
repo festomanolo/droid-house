@@ -325,50 +325,66 @@ struct MainExplorerView: View {
     }
     
     private var photosGridView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                let grouped = Dictionary(grouping: filteredFiles) { file in
-                    // Group by YYYY-MM-DD
-                    String(file.modifiedDate.prefix(10))
-                }
-                let sortedKeys = grouped.keys.sorted(by: >)
-                
+        let grouped = Dictionary(grouping: filteredFiles) { file in
+            // Group by YYYY-MM-DD
+            String(file.modifiedDate.prefix(10))
+        }
+        let sortedKeys = grouped.keys.sorted(by: >)
+
+        return ScrollView {
+            // One lazy grid with a section per day. A lazy grid per day inside
+            // a plain VStack defeated the laziness, so a large camera folder
+            // laid out far more cells than were on screen.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 2)], alignment: .leading, spacing: 2) {
                 ForEach(sortedKeys, id: \.self) { date in
-                    VStack(alignment: .leading, spacing: 12) {
+                    Section {
+                        ForEach(grouped[date] ?? []) { file in
+                            PhotoCell(
+                                file: file,
+                                isSelected: selectedFileIDs.contains(file.id),
+                                onOpen: { handleOpen(file) },
+                                onSelect: { handleSelect(file, extending: $0) },
+                                contextMenu: { contextMenuContent(for: file) },
+                                adbService: adbService
+                            )
+                            .onDrag {
+                                let filesToDrag = selectedFileIDs.contains(file.id) ? selectedFiles : [file]
+                                return createDragProvider(for: filesToDrag)
+                            }
+                        }
+                    } header: {
                         Text(formatDate(date))
                             .font(.headline)
                             .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
-                        
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 2)], spacing: 2) {
-                            ForEach(grouped[date] ?? []) { file in
-                                PhotoCell(
-                                    file: file,
-                                    isSelected: selectedFileIDs.contains(file.id),
-                                    onOpen: { handleOpen(file) },
-                                    onSelect: { handleSelect(file, extending: $0) },
-                                    contextMenu: { contextMenuContent(for: file) },
-                                    adbService: adbService
-                                )
-                                .onDrag {
-                                    let filesToDrag = selectedFileIDs.contains(file.id) ? selectedFiles : [file]
-                                    return createDragProvider(for: filesToDrag)
-                                }
-                            }
-                        }
+                            .padding(.top, 22)
+                            .padding(.bottom, 10)
                     }
                 }
             }
-            .padding(.vertical, 20)
+            .padding(.bottom, 20)
         }
     }
     
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
     private func formatDate(_ dateStr: String) -> String {
-        // Assume YYYY-MM-DD
-        let today = String(Date().description.prefix(10))
-        if dateStr == today { return "Today" }
-        // For simplicity, just return the string or a more friendly format if needed
-        return dateStr
+        // `Date().description` is UTC, so "Today" used to be wrong for part of
+        // every day outside UTC. Compare in the local calendar instead.
+        let today = Date()
+        if dateStr == Self.dayFormatter.string(from: today) { return "Today" }
+        if let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: today),
+           dateStr == Self.dayFormatter.string(from: yesterday) {
+            return "Yesterday"
+        }
+        guard let date = Self.dayFormatter.date(from: dateStr) else { return dateStr }
+        return date.formatted(date: .complete, time: .omitted)
     }
 
     private var iconGrid: some View {
