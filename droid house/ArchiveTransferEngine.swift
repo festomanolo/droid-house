@@ -325,7 +325,7 @@ final class ArchiveTransferEngine: ObservableObject {
         // Feed the archive into adb's stdin off the main thread, chunk by chunk,
         // so we get a live byte counter and never buffer the whole file in memory.
         let writeHandle = inPipe.fileHandleForWriting
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async {
             let chunkSize = 256 * 1024
             while true {
                 let chunk = reader.readData(ofLength: chunkSize)
