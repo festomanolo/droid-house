@@ -9,6 +9,9 @@ class ADBService: ObservableObject {
     @Published var selectedDevice: ADBDevice?
     @Published var isLoading: Bool = false
     @Published var lastError: String?
+    /// A failed action (rename, upload, copy…). Shown as an alert over the
+    /// listing; `lastError` is reserved for "this folder could not be shown".
+    @Published var operationError: String?
     @Published var sortOrder: SortOrder = .name {
         didSet {
             // Previously the new order only applied on the next folder load.
@@ -672,11 +675,15 @@ class ADBService: ObservableObject {
         guard let device = selectedDevice else {
             throw ADBError.noDevice
         }
-        
-        for file in files {
-            _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(Self.shellQuote(file.fullPath))"))
+
+        // One shell round-trip per batch instead of one per file; chunked so a
+        // huge selection stays under the shell's argument limit.
+        let paths = files.map { Self.shellQuote($0.fullPath) }
+        for start in stride(from: 0, to: paths.count, by: 100) {
+            let chunk = paths[start..<min(start + 100, paths.count)].joined(separator: " ")
+            _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(chunk)"), timeout: 120)
         }
-        
+
         await listFiles(path: currentPath)
     }
     
