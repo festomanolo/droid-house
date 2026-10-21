@@ -887,14 +887,11 @@ struct MainExplorerView: View {
                 defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
 
                 do {
-                    var isDirectory: ObjCBool = false
-                    FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
-
-                    if isDirectory.boolValue {
-                        try await uploadFolder(localURL: fileURL, remotePath: target)
-                    } else {
-                        try await adbService.pushFile(localPath: fileURL.path, remotePath: target)
-                    }
+                    // `adb push` copies folders recursively over one sync
+                    // connection. The old per-file recursion spawned an adb
+                    // process and re-listed the folder for every single file.
+                    try await adbService.pushFile(localPath: fileURL.path, remotePath: target, refreshListing: false)
+                } catch is CancellationError {
                 } catch {
                     adbService.lastError = "Upload failed: \(error.localizedDescription)"
                 }
