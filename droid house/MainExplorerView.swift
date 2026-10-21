@@ -359,11 +359,7 @@ struct MainExplorerView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
                             .padding(.top, 22)
-                                    let filesToDrag = selectedFileIDs.contains(file.id) ? selectedFiles : [file]
-                                    return createDragProvider(for: filesToDrag)
-                                }
-                            }
-                        }
+                            .padding(.bottom, 10)
                     }
                 }
             }
