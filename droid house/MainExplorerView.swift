@@ -83,6 +83,10 @@ struct MainExplorerView: View {
             // the view re-appears so we don't stack handlers (and leak them).
             guard keyMonitor == nil else { return }
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                // Leave typing alone. Without this, Space and ⌘C were swallowed
+                // in the search field and in sheets whenever files were selected.
+                if NSApp.keyWindow?.firstResponder is NSText { return event }
+
                 // Space bar for Quick Look
                 if event.keyCode == 49 && event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
                     if !selectedFileIDs.isEmpty {
@@ -105,6 +109,21 @@ struct MainExplorerView: View {
                 NSEvent.removeMonitor(monitor)
                 keyMonitor = nil
             }
+        }
+        .onChange(of: adbService.currentPath) { _, _ in
+            // Selections refer to the folder they were made in.
+            selectedFileIDs.removeAll()
+        }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { adbService.operationError != nil },
+                set: { if !$0 { adbService.operationError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { adbService.operationError = nil }
+        } message: {
+            Text(adbService.operationError ?? "")
         }
         .quickLookPreview($previewURL)
     }
@@ -479,11 +498,11 @@ struct MainExplorerView: View {
             }
             if !adbService.clipboard.isEmpty {
                 Button("Paste Here (\(adbService.clipboard.count))") {
-                    Task { try? await adbService.paste() }
+                    runOperation("paste") { try await adbService.paste() }
                 }
             }
             Button("Duplicate\(suffix)") {
-                Task { try? await adbService.duplicateFiles(targets) }
+                runOperation("duplicate") { try await adbService.duplicateFiles(targets) }
             }
 
             Divider()
@@ -521,7 +540,7 @@ struct MainExplorerView: View {
 
             if !adbService.clipboard.isEmpty {
                 Button("Paste (\(adbService.clipboard.count))") {
-                    Task { try? await adbService.paste() }
+                    runOperation("paste") { try await adbService.paste() }
                 }
                 .keyboardShortcut("v", modifiers: .command)
             }
@@ -539,6 +558,18 @@ struct MainExplorerView: View {
                 Task { await adbService.listFiles(path: adbService.currentPath) }
             }
             .keyboardShortcut("r", modifiers: .command)
+        }
+    }
+
+    /// Runs an on-device file action and reports failure instead of
+    /// silently swallowing it.
+    private func runOperation(_ verb: String, _ action: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await action()
+            } catch {
+                adbService.operationError = "Couldn't \(verb): \(error.localizedDescription)"
+            }
         }
     }
 
@@ -564,8 +595,9 @@ struct MainExplorerView: View {
                     pasteboard.clearContents()
                     pasteboard.writeObjects(urls)
                 }
+            } catch is CancellationError {
             } catch {
-                adbService.lastError = "Failed to copy: \(error.localizedDescription)"
+                adbService.operationError = "Couldn't copy to the Mac: \(error.localizedDescription)"
             }
         }
     }
@@ -598,7 +630,11 @@ struct MainExplorerView: View {
                 .keyboardShortcut(.cancelAction)
                 Button("Create") {
                     Task {
-                        try? await adbService.createFolder(name: newFolderName)
+                        do {
+                            try await adbService.createFolder(name: newFolderName)
+                        } catch {
+                            adbService.operationError = "Couldn't create “\(newFolderName)”: \(error.localizedDescription)"
+                        }
                         showNewFolderSheet = false
                     }
                 }
@@ -624,7 +660,11 @@ struct MainExplorerView: View {
                 Button("Rename") {
                     if let file = fileToRename {
                         Task {
-                            try? await adbService.renameFile(oldPath: file.fullPath, newName: renameText)
+                            do {
+                                try await adbService.renameFile(oldPath: file.fullPath, newName: renameText)
+                            } catch {
+                                adbService.operationError = "Couldn't rename “\(file.name)”: \(error.localizedDescription)"
+                            }
                             showRenameSheet = false
                         }
                     }
@@ -676,7 +716,12 @@ struct MainExplorerView: View {
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task {
-                try? await adbService.pullFile(remotePath: file.fullPath, localPath: url.path)
+                do {
+                    try await adbService.pullFile(remotePath: file.fullPath, localPath: url.path)
+                } catch is CancellationError {
+                } catch {
+                    adbService.operationError = "Couldn't save “\(file.name)”: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -692,8 +737,9 @@ struct MainExplorerView: View {
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.writeObjects([tempFile as NSURL])
+            } catch is CancellationError {
             } catch {
-                adbService.lastError = "Failed to copy: \(error.localizedDescription)"
+                adbService.operationError = "Couldn't copy to the Mac: \(error.localizedDescription)"
             }
         }
     }
@@ -717,8 +763,9 @@ struct MainExplorerView: View {
                     pasteboard.clearContents()
                     pasteboard.writeObjects(urls)
                 }
+            } catch is CancellationError {
             } catch {
-                adbService.lastError = "Failed to copy: \(error.localizedDescription)"
+                adbService.operationError = "Couldn't copy to the Mac: \(error.localizedDescription)"
             }
         }
     }
@@ -810,11 +857,10 @@ struct MainExplorerView: View {
                 let tempFile = dir.appendingPathComponent(file.name)
                 try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
 
-                await MainActor.run {
-                    previewURL = tempFile
-                }
+                previewURL = tempFile
+            } catch is CancellationError {
             } catch {
-                adbService.lastError = "Failed to preview: \(error.localizedDescription)"
+                adbService.operationError = "Couldn't preview “\(file.name)”: \(error.localizedDescription)"
             }
         }
     }
@@ -833,6 +879,7 @@ struct MainExplorerView: View {
         let target = destination ?? adbService.currentPath
 
         Task {
+            var failures: [String] = []
             for fileURL in urls {
                 // Security-scoped access is required for files dragged in from
                 // outside the app's own containers.
@@ -840,45 +887,30 @@ struct MainExplorerView: View {
                 defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
 
                 do {
-                    var isDirectory: ObjCBool = false
-                    FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
-
-                    if isDirectory.boolValue {
-                        try await uploadFolder(localURL: fileURL, remotePath: target)
-                    } else {
-                        try await adbService.pushFile(localPath: fileURL.path, remotePath: target)
-                    }
+                    // `adb push` copies folders recursively over one sync
+                    // connection. The old per-file recursion spawned an adb
+                    // process and re-listed the folder for every single file.
+                    try await adbService.pushFile(localPath: fileURL.path, remotePath: target, refreshListing: false)
+                } catch is CancellationError {
                 } catch {
-                    adbService.lastError = "Upload failed: \(error.localizedDescription)"
+                    failures.append("\(fileURL.lastPathComponent): \(error.localizedDescription)")
                 }
             }
-        }
-    }
-    
-    private func uploadFolder(localURL: URL, remotePath: String) async throws {
-        let folderName = localURL.lastPathComponent
-        let newRemotePath = remotePath.hasSuffix("/") ? "\(remotePath)\(folderName)" : "\(remotePath)/\(folderName)"
-
-        // Create the destination folder at its true absolute path.
-        try await adbService.makeDirectory(path: newRemotePath)
-
-        let contents = try FileManager.default.contentsOfDirectory(at: localURL, includingPropertiesForKeys: [.isDirectoryKey])
-
-        for itemURL in contents {
-            var isDirectory: ObjCBool = false
-            FileManager.default.fileExists(atPath: itemURL.path, isDirectory: &isDirectory)
-
-            if isDirectory.boolValue {
-                try await uploadFolder(localURL: itemURL, remotePath: newRemotePath)
-            } else {
-                try await adbService.pushFile(localPath: itemURL.path, remotePath: newRemotePath)
+            await adbService.refreshCurrentFolder()
+            if !failures.isEmpty {
+                adbService.operationError = "Upload failed for \(failures.joined(separator: "\n"))"
             }
         }
     }
     
     private func deleteSelectedFiles() {
+        let targets = selectedFiles
         Task {
-            try? await adbService.deleteFiles(selectedFiles)
+            do {
+                try await adbService.deleteFiles(targets)
+            } catch {
+                adbService.operationError = "Couldn't delete: \(error.localizedDescription)"
+            }
             selectedFileIDs.removeAll()
             selectedFile = nil
         }
