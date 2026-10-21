@@ -183,7 +183,7 @@ final class ArchiveTransferEngine: ObservableObject {
         }
 
         let process = Process()
-        Self.configure(process, adb: adb, arguments: arguments)
+        ADBProcess.configure(process, adb: adb, arguments: arguments)
 
         let outPipe = Pipe()
         let errPipe = Pipe()
