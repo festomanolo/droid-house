@@ -879,13 +879,6 @@ final class AeroCastEngine: NSObject, ObservableObject {
     private func runADB(_ arguments: [String]) async -> String? {
         guard let output = try? await ADBProcess.run(adb: adbPath, arguments: arguments),
               output.status == 0 else { return nil }
-                        return
-                    }
-                    continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-                } catch {
-                    continuation.resume(returning: nil)
-                }
-            }
-        }
+        return output.stdoutString
     }
 }
