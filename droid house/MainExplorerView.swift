@@ -896,26 +896,9 @@ struct MainExplorerView: View {
                     failures.append("\(fileURL.lastPathComponent): \(error.localizedDescription)")
                 }
             }
-        }
-    }
-    
-    private func uploadFolder(localURL: URL, remotePath: String) async throws {
-        let folderName = localURL.lastPathComponent
-        let newRemotePath = remotePath.hasSuffix("/") ? "\(remotePath)\(folderName)" : "\(remotePath)/\(folderName)"
-
-        // Create the destination folder at its true absolute path.
-        try await adbService.makeDirectory(path: newRemotePath)
-
-        let contents = try FileManager.default.contentsOfDirectory(at: localURL, includingPropertiesForKeys: [.isDirectoryKey])
-
-        for itemURL in contents {
-            var isDirectory: ObjCBool = false
-            FileManager.default.fileExists(atPath: itemURL.path, isDirectory: &isDirectory)
-
-            if isDirectory.boolValue {
-                try await uploadFolder(localURL: itemURL, remotePath: newRemotePath)
-            } else {
-                try await adbService.pushFile(localPath: itemURL.path, remotePath: newRemotePath)
+            await adbService.refreshCurrentFolder()
+            if !failures.isEmpty {
+                adbService.operationError = "Upload failed for \(failures.joined(separator: "\n"))"
             }
         }
     }
