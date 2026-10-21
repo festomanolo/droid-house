@@ -667,30 +667,12 @@ final class StudioCamEngine: NSObject, ObservableObject {
         }
     }
 
+    /// The previous version waited for exit before reading the pipe, which
+    /// deadlocks as soon as adb prints more than the 64 KB pipe buffer, and
+    /// it broke outright when adb was only resolvable by name.
     private func runADB(_ arguments: [String]) async -> String? {
-        let path = self.adbPath
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: path)
-                process.arguments = arguments
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = pipe
-
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    if process.terminationStatus == 0 {
-                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                        continuation.resume(returning: String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines))
-                    } else {
-                        continuation.resume(returning: nil)
-                    }
-                } catch {
-                    continuation.resume(returning: nil)
-                }
-            }
-        }
+        guard let output = try? await ADBProcess.run(adb: adbPath, arguments: arguments),
+              output.status == 0 else { return nil }
+        return output.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

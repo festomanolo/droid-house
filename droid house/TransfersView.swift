@@ -38,7 +38,7 @@ struct TransfersView: View {
                                 .foregroundStyle(Color.accentColor)
                                 .cursor(.interactive)
                         }
-                        VStack(spacing: 8) {
+                        LazyVStack(spacing: 8) {
                             ForEach(transferManager.completedTransfers) { transfer in
                                 FinishedTransferRow(item: transfer)
                             }
