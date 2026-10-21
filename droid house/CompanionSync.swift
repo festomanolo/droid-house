@@ -138,18 +138,17 @@ final class CompanionSync: ObservableObject {
         }
 
         lastAdbPath = adbPath
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [adbPath, "-s", serial, "forward", "tcp:8080", "tcp:8080"]
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
+        // This used to run adb with waitUntilExit() on the main thread, which
+        // froze the UI for as long as adb took — seconds when its server was
+        // still starting.
         do {
-            try process.run()
-            process.waitUntilExit()
-            if process.terminationStatus == 0 {
+            let output = try await ADBProcess.run(
+                adb: adbPath,
+                arguments: ["-s", serial, "forward", "tcp:8080", "tcp:8080"],
+                timeout: 10
+            )
+            if output.status == 0 {
                 portForwardedSerial = serial
                 statusMessage = "Port 8080 forwarded"
                 await checkStatus()
@@ -167,23 +166,12 @@ final class CompanionSync: ObservableObject {
     /// Re-runs `adb forward` without touching the poll loop.
     @discardableResult
     private func reestablishForward(serial: String) async -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [lastAdbPath, "-s", serial, "forward", "tcp:8080", "tcp:8080"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    continuation.resume(returning: process.terminationStatus == 0)
-                } catch {
-                    continuation.resume(returning: false)
-                }
-            }
-        }
+        let output = try? await ADBProcess.run(
+            adb: lastAdbPath,
+            arguments: ["-s", serial, "forward", "tcp:8080", "tcp:8080"],
+            timeout: 10
+        )
+        return output?.status == 0
     }
 
     func checkStatus() async {
@@ -201,24 +189,30 @@ final class CompanionSync: ObservableObject {
             }
 
             let status = try decoder.decode(StatusResponse.self, from: data)
-            isConnected = true
             hasEverConnected = true
-            hasSMSAccess = status.smsAccess
-            hasNotificationAccess = status.notificationAccess
-            deviceSummary = "\(status.deviceModel) · Android \(status.androidRelease)"
-            statusMessage = "Companion \(status.version) connected"
-            lastSyncError = nil
+            // Every assignment to a @Published property notifies observers even
+            // when the value is unchanged, and this runs every 4 s.
+            setIfChanged(\.isConnected, true)
+            setIfChanged(\.hasSMSAccess, status.smsAccess)
+            setIfChanged(\.hasNotificationAccess, status.notificationAccess)
+            setIfChanged(\.deviceSummary, "\(status.deviceModel) · Android \(status.androidRelease)")
+            setIfChanged(\.statusMessage, "Companion \(status.version) connected")
+            setIfChanged(\.lastSyncError, nil)
         } catch {
             markDisconnected("Companion unreachable")
         }
     }
 
     private func markDisconnected(_ message: String) {
-        isConnected = false
-        statusMessage = message
-        hasSMSAccess = false
-        hasNotificationAccess = false
-        deviceSummary = ""
+        setIfChanged(\.isConnected, false)
+        setIfChanged(\.statusMessage, message)
+        setIfChanged(\.hasSMSAccess, false)
+        setIfChanged(\.hasNotificationAccess, false)
+        setIfChanged(\.deviceSummary, "")
+    }
+
+    private func setIfChanged<Value: Equatable>(_ keyPath: ReferenceWritableKeyPath<CompanionSync, Value>, _ value: Value) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 
     // MARK: - Polling
@@ -286,7 +280,7 @@ final class CompanionSync: ObservableObject {
         if decoded != conversations {
             conversations = decoded
         }
-        lastSyncError = nil
+        setIfChanged(\.lastSyncError, nil)
     }
 
     // MARK: - Messages
@@ -539,7 +533,7 @@ final class CompanionSync: ObservableObject {
         let (data, _) = try await URLSession.shared.data(for: request)
         let decoded = try decoder.decode([ScreenshotResponse].self, from: data)
 
-        screenshots = decoded.map { item in
+        let items = decoded.map { item in
             ScreenshotItem(
                 id: item.path,
                 remotePath: item.path,
@@ -547,6 +541,7 @@ final class CompanionSync: ObservableObject {
                 timestamp: Date(timeIntervalSince1970: TimeInterval(item.timestamp) / 1000.0)
             )
         }
+        if items != screenshots { screenshots = items }
     }
 
     /// Raw bytes for an indexed screenshot.

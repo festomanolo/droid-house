@@ -122,8 +122,18 @@ struct AeroCastStreamParser {
             handshakeComplete = true
         }
 
-        while buffer.count >= AeroCastProtocol.packetHeaderLength {
-            let header = [UInt8](buffer.prefix(AeroCastProtocol.packetHeaderLength))
+        // Walk a cursor and compact once at the end. Removing each packet from
+        // the front of `buffer` memmoved the remainder every time, which with
+        // a 256 KB read full of small audio packets meant megabytes of copying
+        // per read, on the main thread, while mirroring.
+        let headerLength = AeroCastProtocol.packetHeaderLength
+        var cursor = buffer.startIndex
+        defer {
+            if cursor > buffer.startIndex { buffer.removeSubrange(buffer.startIndex..<cursor) }
+        }
+
+        while buffer.endIndex - cursor >= headerLength {
+            let header = [UInt8](buffer[cursor..<(cursor + headerLength)])
 
             let rawType = header[0]
             guard let type = AeroCastProtocol.PacketType(rawValue: rawType) else {
@@ -139,12 +149,10 @@ struct AeroCastStreamParser {
 
             guard length <= Self.maxPayload else { throw ParseError.payloadTooLarge(length) }
 
-            let total = AeroCastProtocol.packetHeaderLength + Int(length)
-            guard buffer.count >= total else { break }   // wait for the rest
+            let total = headerLength + Int(length)
+            guard buffer.endIndex - cursor >= total else { break }   // wait for the rest
 
-            let payloadStart = buffer.index(buffer.startIndex, offsetBy: AeroCastProtocol.packetHeaderLength)
-            let payloadEnd = buffer.index(buffer.startIndex, offsetBy: total)
-            let payload = Data(buffer[payloadStart..<payloadEnd])
+            let payload = Data(buffer[(cursor + headerLength)..<(cursor + total)])
 
             packets.append(
                 AeroCastProtocol.Packet(
@@ -155,7 +163,7 @@ struct AeroCastStreamParser {
                 )
             )
 
-            buffer.removeFirst(total)
+            cursor += total
         }
 
         return packets
