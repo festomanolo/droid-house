@@ -367,6 +367,9 @@ struct MainExplorerView: View {
         }
     }
     
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
     private func formatDate(_ dateStr: String) -> String {
         // Assume YYYY-MM-DD
         let today = String(Date().description.prefix(10))
