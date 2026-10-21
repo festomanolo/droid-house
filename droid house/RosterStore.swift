@@ -416,15 +416,7 @@ final class RosterStore: ObservableObject {
     // MARK: ADB
 
     private func runADB(_ arguments: [String], timeout: TimeInterval) async throws -> String {
-                process.standardOutput = pipe
-                process.standardError = errorPipe
-
-                let lock = NSLock()
-                var didResume = false
-                func resumeOnce(_ block: () -> Void) {
-                    lock.lock(); defer { lock.unlock() }
-                    guard !didResume else { return }
-                    didResume = true
+        let output = try await ADBProcess.run(adb: adbPath, arguments: arguments, timeout: timeout)
                     block()
                 }
 
