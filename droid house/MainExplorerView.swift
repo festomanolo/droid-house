@@ -630,7 +630,11 @@ struct MainExplorerView: View {
                 .keyboardShortcut(.cancelAction)
                 Button("Create") {
                     Task {
-                        try? await adbService.createFolder(name: newFolderName)
+                        do {
+                            try await adbService.createFolder(name: newFolderName)
+                        } catch {
+                            adbService.operationError = "Couldn't create “\(newFolderName)”: \(error.localizedDescription)"
+                        }
                         showNewFolderSheet = false
                     }
                 }
