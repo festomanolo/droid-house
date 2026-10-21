@@ -217,14 +217,7 @@ class ADBService: ObservableObject {
 
         let result: Result<[RemoteFile], Error>
         do {
-            // Use ls -laL to follow symlinks, fall back to ls -la if that fails
-            var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(Self.shellQuote(path))"))
-            // If the path itself is a symlink, ls -laL on it might fail or show weird results
-            // In that case, just list the directory contents
-            if output.contains("No such file") || output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                output = try await runADBCommand(shellArguments(device: device, "ls -la \(Self.shellQuote(path))"))
-            }
-            currentFiles = parseFileList(output, basePath: path)
+            result = .success(try await listing(device: device, path: path))
         } catch {
             lastError = "Failed to list files: \(error.localizedDescription)"
             currentFiles = []
