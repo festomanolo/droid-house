@@ -107,7 +107,12 @@ final class RosterStore: ObservableObject {
         }
     }
 
-    @Published private(set) var table: RosterTable = .empty
+    @Published private(set) var table: RosterTable = .empty {
+        didSet { tableVersion &+= 1 }
+    }
+    /// Cheap change token for views that derive data from `table`; comparing
+    /// the tables themselves would mean comparing thousands of rows.
+    private(set) var tableVersion = 0
     @Published private(set) var isLoading = false
     @Published private(set) var isTruncated = false
     @Published private(set) var transport: String = ""

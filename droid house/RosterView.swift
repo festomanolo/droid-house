@@ -18,6 +18,12 @@ struct RosterView: View {
     @State private var sortAscending = true
     @State private var selectedRow: Int?
     @State private var isExporting = false
+    @State private var exportDocument: CSVDocument?
+    /// Filtered + sorted rows, recomputed only when their inputs change.
+    /// As a computed property it ran twice per render, so selecting a row
+    /// or dragging a column divider re-filtered and re-sorted thousands of
+    /// rows on every frame.
+    @State private var visibleRows: [RosterRow] = []
 
     private let rowHeight: CGFloat = 26
     private let gutterWidth: CGFloat = 52
@@ -47,9 +53,15 @@ struct RosterView: View {
             await store.load(kind: store.kind, device: adbService.selectedDevice)
             resetLayout()
         }
+        .onChange(of: store.tableVersion, initial: true) { _, _ in recomputeVisibleRows() }
+        .onChange(of: filter) { _, _ in recomputeVisibleRows() }
+        .onChange(of: sortColumn) { _, _ in recomputeVisibleRows() }
+        .onChange(of: sortAscending) { _, _ in recomputeVisibleRows() }
+        // The CSV is built when Export is pressed. Passed inline, the whole
+        // table was serialised on every render of this view.
         .fileExporter(
             isPresented: $isExporting,
-            document: CSVDocument(text: store.table.csv()),
+            document: exportDocument,
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
@@ -112,6 +124,7 @@ struct RosterView: View {
             Spacer()
 
             Button {
+                exportDocument = CSVDocument(text: store.table.csv())
                 isExporting = true
             } label: {
                 Label("Export CSV", systemImage: "square.and.arrow.up")
@@ -383,30 +396,36 @@ struct RosterView: View {
 
     // MARK: Derived data
 
-    private var visibleRows: [RosterRow] {
+    private func recomputeVisibleRows() {
         var rows = store.table.rows
 
-        let query = filter.trimmingCharacters(in: .whitespaces).lowercased()
+        let query = filter.trimmingCharacters(in: .whitespaces)
         if !query.isEmpty {
+            // Case-insensitive search instead of lowercasing every cell, which
+            // allocated a new string per cell per keystroke.
             rows = rows.filter { row in
-                row.values.contains { $0.lowercased().contains(query) }
+                row.values.contains { $0.range(of: query, options: .caseInsensitive) != nil }
             }
         }
 
         if let sortColumn {
-            rows.sort { lhs, rhs in
-                let a = lhs.value(at: sortColumn)
-                let b = rhs.value(at: sortColumn)
-                // Numeric columns (ids, timestamps) must not sort as strings.
-                if let na = Double(a), let nb = Double(b) {
-                    return sortAscending ? na < nb : na > nb
-                }
-                let result = a.localizedCaseInsensitiveCompare(b)
-                return sortAscending ? result == .orderedAscending : result == .orderedDescending
+            // Parse each key once rather than twice per comparison.
+            let keyed = rows.map { row -> (row: RosterRow, text: String, number: Double?) in
+                let text = row.value(at: sortColumn)
+                return (row, text, Double(text))
             }
+            let ascending = sortAscending
+            rows = keyed.sorted { lhs, rhs in
+                // Numeric columns (ids, timestamps) must not sort as strings.
+                if let na = lhs.number, let nb = rhs.number {
+                    return ascending ? na < nb : na > nb
+                }
+                let result = lhs.text.localizedCaseInsensitiveCompare(rhs.text)
+                return ascending ? result == .orderedAscending : result == .orderedDescending
+            }.map(\.row)
         }
 
-        return rows
+        visibleRows = rows
     }
 
     private var effectiveWidths: [CGFloat] {
