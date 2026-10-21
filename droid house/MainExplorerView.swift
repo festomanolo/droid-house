@@ -879,6 +879,7 @@ struct MainExplorerView: View {
         let target = destination ?? adbService.currentPath
 
         Task {
+            var failures: [String] = []
             for fileURL in urls {
                 // Security-scoped access is required for files dragged in from
                 // outside the app's own containers.
