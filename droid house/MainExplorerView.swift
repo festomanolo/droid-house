@@ -561,6 +561,18 @@ struct MainExplorerView: View {
         }
     }
 
+    /// Runs an on-device file action and reports failure instead of
+    /// silently swallowing it.
+    private func runOperation(_ verb: String, _ action: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await action()
+            } catch {
+                adbService.operationError = "Couldn't \(verb): \(error.localizedDescription)"
+            }
+        }
+    }
+
     private func selectIfNeeded(_ targets: [RemoteFile]) {
         if targets.count == 1, let only = targets.first, !selectedFileIDs.contains(only.id) {
             selectedFileIDs = [only.id]
