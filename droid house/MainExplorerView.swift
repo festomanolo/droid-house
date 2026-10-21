@@ -83,6 +83,10 @@ struct MainExplorerView: View {
             // the view re-appears so we don't stack handlers (and leak them).
             guard keyMonitor == nil else { return }
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                // Leave typing alone. Without this, Space and ⌘C were swallowed
+                // in the search field and in sheets whenever files were selected.
+                if NSApp.keyWindow?.firstResponder is NSText { return event }
+
                 // Space bar for Quick Look
                 if event.keyCode == 49 && event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
                     if !selectedFileIDs.isEmpty {
