@@ -89,9 +89,11 @@ struct MacOSSplashScreenView: View {
 
 struct ContentView: View {
     @StateObject private var adbService = ADBService()
-    @StateObject private var companionSync = CompanionSync.shared
-    @ObservedObject var transferManager = TransferManager.shared
-    
+    // Deliberately not observed: this view only calls into the bridge. As an
+    // observer, every 4 s companion poll and every transfer progress tick
+    // re-rendered the entire window, including the file browser.
+    private let companionSync = CompanionSync.shared
+
     @State private var selectedSection: NavigationSection = .device
     @State private var layoutMode: MainExplorerView.LayoutMode = .icon
     @State private var searchText: String = ""
