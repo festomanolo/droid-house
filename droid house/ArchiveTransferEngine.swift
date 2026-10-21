@@ -401,6 +401,7 @@ final class ArchiveTransferEngine: ObservableObject {
     }
 
     private func reset() {
+        counter.reset()
         bytesTransferred = 0
         bytesPerSecond = 0
         elapsed = 0
