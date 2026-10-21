@@ -893,7 +893,7 @@ struct MainExplorerView: View {
                     try await adbService.pushFile(localPath: fileURL.path, remotePath: target, refreshListing: false)
                 } catch is CancellationError {
                 } catch {
-                    adbService.lastError = "Upload failed: \(error.localizedDescription)"
+                    failures.append("\(fileURL.lastPathComponent): \(error.localizedDescription)")
                 }
             }
         }
