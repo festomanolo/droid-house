@@ -440,6 +440,27 @@ final class ArchiveTransferEngine: ObservableObject {
     }
 }
 
+// MARK: - Byte counter
+
+/// Thread-safe running total shared between pipe callbacks and the sampler.
+nonisolated final class ByteCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var total: Int64 = 0
+
+    func add(_ count: Int64) {
+        lock.lock(); total += count; lock.unlock()
+    }
+
+    func reset() {
+        lock.lock(); total = 0; lock.unlock()
+    }
+
+    var value: Int64 {
+        lock.lock(); defer { lock.unlock() }
+        return total
+    }
+}
+
 // MARK: - Byte formatting
 
 enum ByteFormat {
