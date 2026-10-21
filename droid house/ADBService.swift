@@ -675,9 +675,13 @@ class ADBService: ObservableObject {
         guard let device = selectedDevice else {
             throw ADBError.noDevice
         }
-        
-        for file in files {
-            _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(Self.shellQuote(file.fullPath))"))
+
+        // One shell round-trip per batch instead of one per file; chunked so a
+        // huge selection stays under the shell's argument limit.
+        let paths = files.map { Self.shellQuote($0.fullPath) }
+        for start in stride(from: 0, to: paths.count, by: 100) {
+            let chunk = paths[start..<min(start + 100, paths.count)].joined(separator: " ")
+            _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(chunk)"), timeout: 120)
         }
         
         await listFiles(path: currentPath)
