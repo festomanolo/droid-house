@@ -527,10 +527,12 @@ class StudioStreamService : Service() {
         }
 
         // If same camera (e.g. logical multi-camera supporting 0.5x-10x zoom), apply zoom ratio smoothly
-        if (captureSession != null && captureRequestBuilder != null) {
-            applyLensZoomToBuilder(captureRequestBuilder!!, lensId)
-            val session = captureSession ?: return false
-            val builder = captureRequestBuilder ?: return false
+        // Snapshot both once: the camera thread can null them between a
+        // null check and a `!!`, which crashed the service mid-switch.
+        val session = captureSession
+        val builder = captureRequestBuilder
+        if (session != null && builder != null) {
+            applyLensZoomToBuilder(builder, lensId)
             return runCatching {
                 session.setRepeatingRequest(builder.build(), null, cameraHandler)
                 true
