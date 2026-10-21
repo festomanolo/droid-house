@@ -214,7 +214,8 @@ class ADBService: ObservableObject {
         if !isRefresh { isLoading = true }
         lastError = nil
         currentPath = path
-        
+
+        let result: Result<[RemoteFile], Error>
         do {
             // Use ls -laL to follow symlinks, fall back to ls -la if that fails
             var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(Self.shellQuote(path))"))
