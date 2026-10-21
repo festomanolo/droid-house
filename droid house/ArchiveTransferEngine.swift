@@ -382,7 +382,8 @@ final class ArchiveTransferEngine: ObservableObject {
         guard window > 0.05 else { return }
         let instantaneous = Double(total - lastSampleBytes) / window
         bytesPerSecond = bytesPerSecond == 0 ? instantaneous : (bytesPerSecond * 0.6 + instantaneous * 0.4)
-        lastSampleBytes = bytesTransferred
+        lastSampleBytes = total
+        lastSampleDate = now
     }
 
     private func finish(_ phase: Phase) {
