@@ -363,7 +363,7 @@ struct MainExplorerView: View {
                     }
                 }
             }
-            .padding(.vertical, 20)
+            .padding(.bottom, 20)
         }
     }
     
