@@ -61,6 +61,22 @@ public final class MacRemoteControlHost: ObservableObject {
     private let frameGateLock = NSLock()
     private var frameInFlight = false
 
+    // Authentication state used to gate commands. Only touched on
+    // `networkQueue`, so it is always current when a message is checked.
+    // The published `isClientAuthenticated` is UI state updated
+    // asynchronously on main: a second client connecting just after an
+    // authenticated one could have its first commands accepted before that
+    // async reset landed.
+    private var authenticatedConnection: ObjectIdentifier?
+    private var failedAuthAttempts = 0
+    private var authLockedUntil: Date?
+
+    private static let logTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
     public static let shared = MacRemoteControlHost()
 
     public init() {
@@ -156,6 +172,7 @@ public final class MacRemoteControlHost: ObservableObject {
         }
 
         activeConnection = connection
+        authenticatedConnection = nil
 
         let endpointDesc = connection.endpoint.debugDescription
         let clientIP = extractIP(from: endpointDesc)
@@ -191,6 +208,7 @@ public final class MacRemoteControlHost: ObservableObject {
         stopScreenStreaming()
         stopCursorMonitoring()
         activeConnection = nil
+        authenticatedConnection = nil
         releaseFrameGate()
         DispatchQueue.main.async {
             self.connectedClientName = nil
@@ -239,9 +257,24 @@ public final class MacRemoteControlHost: ObservableObject {
 
     private func handleEnvelope(_ envelope: MacRemoteProtocol.InboundEnvelope, from connection: NWConnection) {
         // Authentication check
-        if !isClientAuthenticated {
+        if authenticatedConnection != ObjectIdentifier(connection) {
             if envelope.type == "auth" {
+                if let lockedUntil = authLockedUntil, lockedUntil > Date() {
+                    let wait = Int(lockedUntil.timeIntervalSinceNow.rounded(.up))
+                    sendMessage(MacRemoteProtocol.OutboundEnvelope(
+                        type: "auth_fail",
+                        success: false,
+                        message: "Too many wrong PINs. Try again in \(wait)s."
+                    ))
+                    connection.cancel()
+                    handleClientDisconnect()
+                    return
+                }
+
                 if let pin = envelope.pin, pin == self.pairingPin {
+                    authenticatedConnection = ObjectIdentifier(connection)
+                    failedAuthAttempts = 0
+                    authLockedUntil = nil
                     let clientName = envelope.deviceName ?? "Android Companion"
                     DispatchQueue.main.async {
                         self.isClientAuthenticated = true
@@ -270,7 +303,18 @@ public final class MacRemoteControlHost: ObservableObject {
                     self.startCursorMonitoring()
                     self.broadcastCurrentCursor(force: true)
                 } else {
-                    logEvent("Authentication failed: Invalid PIN '\(envelope.pin ?? "")'")
+                    // Without a limit a short PIN reachable over Tailscale/WAN
+                    // falls to a brute-force loop in seconds. After five misses
+                    // each further miss locks pairing out for twice as long,
+                    // capped at 15 minutes.
+                    failedAuthAttempts += 1
+                    if failedAuthAttempts >= 5 {
+                        let lockout = min(900.0, 30.0 * pow(2.0, Double(failedAuthAttempts - 5)))
+                        authLockedUntil = Date().addingTimeInterval(lockout)
+                        logEvent("Authentication failed (\(failedAuthAttempts) attempts) — pairing locked for \(Int(lockout))s")
+                    } else {
+                        logEvent("Authentication failed: wrong PIN")
+                    }
                     let failResponse = MacRemoteProtocol.OutboundEnvelope(
                         type: "auth_fail",
                         success: false,
@@ -1071,9 +1115,7 @@ public final class MacRemoteControlHost: ObservableObject {
     // MARK: - Activity Logging
 
     private func logEvent(_ message: String) {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        let timestamp = formatter.string(from: Date())
+        let timestamp = Self.logTimeFormatter.string(from: Date())
         let entry = "[\(timestamp)] \(message)"
 
         DispatchQueue.main.async {
