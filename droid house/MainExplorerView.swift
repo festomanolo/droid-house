@@ -716,7 +716,12 @@ struct MainExplorerView: View {
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task {
-                try? await adbService.pullFile(remotePath: file.fullPath, localPath: url.path)
+                do {
+                    try await adbService.pullFile(remotePath: file.fullPath, localPath: url.path)
+                } catch is CancellationError {
+                } catch {
+                    adbService.operationError = "Couldn't save “\(file.name)”: \(error.localizedDescription)"
+                }
             }
         }
     }
