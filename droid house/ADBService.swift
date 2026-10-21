@@ -146,7 +146,7 @@ class ADBService: ObservableObject {
         } catch {
             lastError = "Failed to detect devices: \(error.localizedDescription)"
         }
-        
+
         if let device = selectedDevice {
             await fetchStorageInfo(device: device)
         }
