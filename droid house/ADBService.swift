@@ -235,7 +235,29 @@ class ADBService: ObservableObject {
 
         refreshStorageInfoIfStale(device: device)
     }
-    
+
+    private func listing(device: ADBDevice, path: String) async throws -> [RemoteFile] {
+        let quoted = Self.shellQuote(path)
+        // -L follows symlinks so linked folders show as folders. `ls` exits
+        // non-zero if any single entry can't be read, but still lists the
+        // rest, so a non-zero status alone is not a failure here.
+        var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(quoted)"), allowFailure: true)
+        if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            output = try await runADBCommand(shellArguments(device: device, "ls -la \(quoted)"))
+        }
+        return parseFileList(output, basePath: path)
+    }
+
+    /// Storage barely changes between folder clicks; a `df` per navigation
+    /// doubled the latency of every click.
+    private func refreshStorageInfoIfStale(device: ADBDevice) {
+        if let last = lastStorageFetch, last.serial == device.id, Date().timeIntervalSince(last.date) < 20 {
+            return
+        }
+        lastStorageFetch = (device.id, Date())
+        Task { await fetchStorageInfo(device: device) }
+    }
+
     private func parseFileList(_ output: String, basePath: String) -> [RemoteFile] {
         var files: [RemoteFile] = []
         let lines = output.components(separatedBy: "\n")
