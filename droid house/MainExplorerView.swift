@@ -857,9 +857,8 @@ struct MainExplorerView: View {
                 let tempFile = dir.appendingPathComponent(file.name)
                 try await adbService.pullFile(remotePath: file.fullPath, localPath: tempFile.path)
 
-                await MainActor.run {
-                    previewURL = tempFile
-                }
+                previewURL = tempFile
+            } catch is CancellationError {
             } catch {
                 adbService.lastError = "Failed to preview: \(error.localizedDescription)"
             }
