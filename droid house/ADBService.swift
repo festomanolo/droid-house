@@ -9,6 +9,9 @@ class ADBService: ObservableObject {
     @Published var selectedDevice: ADBDevice?
     @Published var isLoading: Bool = false
     @Published var lastError: String?
+    /// A failed action (rename, upload, copy…). Shown as an alert over the
+    /// listing; `lastError` is reserved for "this folder could not be shown".
+    @Published var operationError: String?
     @Published var sortOrder: SortOrder = .name {
         didSet {
             // Previously the new order only applied on the next folder load.
