@@ -9,7 +9,12 @@ class ADBService: ObservableObject {
     @Published var selectedDevice: ADBDevice?
     @Published var isLoading: Bool = false
     @Published var lastError: String?
-    @Published var sortOrder: SortOrder = .name
+    @Published var sortOrder: SortOrder = .name {
+        didSet {
+            // Previously the new order only applied on the next folder load.
+            if sortOrder != oldValue { currentFiles = sortFiles(currentFiles) }
+        }
+    }
     @Published var storageInfo: [StorageInfo] = []
     @Published var bookmarks: [String] = []
     
