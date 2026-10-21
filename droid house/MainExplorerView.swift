@@ -347,7 +347,12 @@ struct MainExplorerView: View {
                                 contextMenu: { contextMenuContent(for: file) },
                                 adbService: adbService
                             )
-                    VStack(alignment: .leading, spacing: 12) {
+                            .onDrag {
+                                let filesToDrag = selectedFileIDs.contains(file.id) ? selectedFiles : [file]
+                                return createDragProvider(for: filesToDrag)
+                            }
+                        }
+                    } header: {
                         Text(formatDate(date))
                             .font(.headline)
                             .foregroundStyle(.secondary)
