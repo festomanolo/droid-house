@@ -692,38 +692,22 @@ class ADBService: ObservableObject {
     
     func fetchFileDataFast(path: String, maxSize: Int? = nil) async throws -> Data {
         guard let device = selectedDevice else { throw ADBError.noDevice }
-        let adb = adbPath
-        let deviceID = device.id
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                
-                // Single quotes, not double: a double-quoted path still lets the
-                // device shell expand $, ` and \, so a filename containing any
-                // of them would read the wrong file or nothing at all.
-                let quoted = ADBService.shellQuote(path)
-                var command = "cat \(quoted)"
-                if let max = maxSize {
-                    command = "dd if=\(quoted) bs=1k count=\(max / 1024) 2>/dev/null"
-                }
-                
-                process.arguments = [adb, "-s", deviceID, "exec-out", command]
-                
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                
-                do {
-                    try process.run()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    continuation.resume(returning: data)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
+
+        // Single quotes, not double: a double-quoted path still lets the
+        // device shell expand $, ` and \, so a filename containing any
+        // of them would read the wrong file or nothing at all.
+        let quoted = ADBService.shellQuote(path)
+        var command = "cat \(quoted)"
+        if let max = maxSize {
+            command = "dd if=\(quoted) bs=1k count=\(max / 1024) 2>/dev/null"
         }
+
+        let output = try await ADBProcess.run(
+            adb: adbPath,
+            arguments: ["-s", device.id, "exec-out", command],
+            timeout: 120
+        )
+        return output.stdout
     }
     
     // MARK: - Remote shell quoting
@@ -751,64 +735,21 @@ class ADBService: ObservableObject {
 
     // MARK: - ADB Command Execution
 
-    private func runADBCommand(_ arguments: [String], timeout: TimeInterval = 30) async throws -> String {
-        let adb = adbPath
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = [adb] + arguments
-
-                let pipe = Pipe()
-                let errorPipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = errorPipe
-
-                // Guard against a hung adb server / unresponsive device by
-                // terminating the process once the timeout elapses.
-                let resumed = NSLock()
-                var didResume = false
-                func resumeOnce(_ block: () -> Void) {
-                    resumed.lock(); defer { resumed.unlock() }
-                    guard !didResume else { return }
-                    didResume = true
-                    block()
-                }
-
-                let timeoutSource = DispatchSource.makeTimerSource(queue: .global())
-                timeoutSource.schedule(deadline: .now() + timeout)
-                timeoutSource.setEventHandler {
-                    if process.isRunning { process.terminate() }
-                    resumeOnce {
-                        continuation.resume(throwing: ADBError.timedOut(timeout))
-                    }
-                }
-                timeoutSource.resume()
-
-                do {
-                    try process.run()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    timeoutSource.cancel()
-
-                    if process.terminationStatus != 0 {
-                        let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                        resumeOnce {
-                            continuation.resume(throwing: ADBError.commandFailed(errorString.trimmingCharacters(in: .whitespacesAndNewlines)))
-                        }
-                    } else {
-                        let output = String(data: data, encoding: .utf8) ?? ""
-                        resumeOnce { continuation.resume(returning: output) }
-                    }
-                } catch {
-                    timeoutSource.cancel()
-                    resumeOnce {
-                        continuation.resume(throwing: ADBError.processError(error.localizedDescription))
-                    }
-                }
-            }
+    /// Runs adb and returns stdout.
+    ///
+    /// - Parameters:
+    ///   - timeout: Hard limit, or `nil` for long transfers that must not be
+    ///     killed mid-stream.
+    ///   - allowFailure: Return stdout even on a non-zero exit. `ls` exits 1
+    ///     when a single entry is unreadable (a broken symlink, say) while
+    ///     still printing every other entry, so treating that as fatal used to
+    ///     blank whole folders.
+    private func runADBCommand(_ arguments: [String], timeout: TimeInterval? = 30, allowFailure: Bool = false) async throws -> String {
+        let output = try await ADBProcess.run(adb: adbPath, arguments: arguments, timeout: timeout)
+        guard output.status == 0 || allowFailure else {
+            throw ADBError.commandFailed(output.errorText)
         }
+        return output.stdoutString
     }
     
     // MARK: - Bookmarks
