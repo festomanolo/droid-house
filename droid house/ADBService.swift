@@ -326,8 +326,6 @@ class ADBService: ObservableObject {
                 return (a.name as NSString).pathExtension.localizedCaseInsensitiveCompare((b.name as NSString).pathExtension) == .orderedAscending
             }
         }
-        
-        return files
     }
     
     /// Lists only the sub-directories at a path, without touching the main
