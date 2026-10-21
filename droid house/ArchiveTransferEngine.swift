@@ -344,6 +344,7 @@ final class ArchiveTransferEngine: ObservableObject {
 
     private func completePush(status: Int32) {
         guard isRunning || phase == .streaming else { return }
+        sampleRate()
         if status == 0 {
             phase = .finalizing
             appendLog("Extraction finished — POSIX modification dates restored on device.", isError: false)
