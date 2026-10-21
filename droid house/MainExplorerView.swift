@@ -325,10 +325,11 @@ struct MainExplorerView: View {
     }
     
     private var photosGridView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                let grouped = Dictionary(grouping: filteredFiles) { file in
-                    // Group by YYYY-MM-DD
+        let grouped = Dictionary(grouping: filteredFiles) { file in
+            // Group by YYYY-MM-DD
+            String(file.modifiedDate.prefix(10))
+        }
+        let sortedKeys = grouped.keys.sorted(by: >)
                     String(file.modifiedDate.prefix(10))
                 }
                 let sortedKeys = grouped.keys.sorted(by: >)
