@@ -39,7 +39,8 @@ struct TransferItem: Identifiable, Codable {
     /// readout doesn't jitter between adb polls.
     var bytesPerSecond: Double = 0
 
-    var task: Task<Void, Never>? = nil
+    /// Stops the underlying adb process. Set by whoever runs the transfer.
+    var cancelHandler: (@MainActor () -> Void)? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, type, fileName, source, destination, status, error
@@ -106,6 +107,10 @@ final class TransferManager: ObservableObject {
 
     private init() {}
 
+    /// History is rendered as a list; unbounded, a long session of
+    /// thumbnail-free previews and uploads made the Transfers pane crawl.
+    private let historyLimit = 200
+
     private var flourishTask: Task<Void, Never>?
 
     /// Per-transfer throughput sampling state.
@@ -152,7 +157,8 @@ final class TransferManager: ObservableObject {
     /// Supplies the payload size once it has been probed, upgrading the
     /// transfer from indeterminate to a real percentage.
     func setTotalBytes(id: UUID, totalBytes: Int64?) {
-        guard let index = activeTransfers.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = activeTransfers.firstIndex(where: { $0.id == id }),
+              activeTransfers[index].totalBytes != totalBytes else { return }
         activeTransfers[index].totalBytes = totalBytes
     }
 
@@ -161,11 +167,17 @@ final class TransferManager: ObservableObject {
     func updateBytes(id: UUID, bytesTransferred: Int64) {
         guard let index = activeTransfers.firstIndex(where: { $0.id == id }) else { return }
 
-        // Never let a stale poll walk the bar backwards.
-        let clamped = max(activeTransfers[index].bytesTransferred, bytesTransferred)
+        // Work on a copy and write back once: each subscript mutation of a
+        // @Published array is its own change notification, and this runs
+        // several times a second per transfer.
+        var item = activeTransfers[index]
 
-        if activeTransfers[index].startedAt == nil && clamped > 0 {
-            activeTransfers[index].startedAt = Date()
+        // Never let a stale poll walk the bar backwards.
+        let clamped = max(item.bytesTransferred, bytesTransferred)
+        guard clamped != item.bytesTransferred || item.bytesPerSecond > 0 else { return }
+
+        if item.startedAt == nil && clamped > 0 {
+            item.startedAt = Date()
         }
 
         let now = Date()
@@ -174,18 +186,27 @@ final class TransferManager: ObservableObject {
             if elapsed > 0.05 {
                 let delta = Double(clamped - sample.lastBytes)
                 let instant = delta / elapsed
-                let previous = activeTransfers[index].bytesPerSecond
+                let previous = item.bytesPerSecond
                 // Exponential smoothing keeps the readout legible while still
                 // reacting within a couple of samples to a real speed change.
-                activeTransfers[index].bytesPerSecond =
-                    previous == 0 ? instant : (previous * 0.65 + instant * 0.35)
+                item.bytesPerSecond = previous == 0 ? instant : (previous * 0.65 + instant * 0.35)
                 sample.lastBytes = clamped
                 sample.lastTime = now
                 samples[id] = sample
             }
         }
 
-        activeTransfers[index].bytesTransferred = clamped
+        item.bytesTransferred = clamped
+        activeTransfers[index] = item
+    }
+
+    private func archive(_ item: TransferItem) {
+        var item = item
+        item.cancelHandler = nil
+        completedTransfers.insert(item, at: 0)
+        if completedTransfers.count > historyLimit {
+            completedTransfers.removeLast(completedTransfers.count - historyLimit)
+        }
     }
 
     func completeTransfer(id: UUID) {
@@ -196,7 +217,7 @@ final class TransferManager: ObservableObject {
                 item.bytesTransferred = total
             }
             samples[id] = nil
-            completedTransfers.insert(item, at: 0)
+            archive(item)
             flourish(item)
         }
     }
@@ -207,7 +228,7 @@ final class TransferManager: ObservableObject {
             item.status = .failed
             item.error = error
             samples[id] = nil
-            completedTransfers.insert(item, at: 0)
+            archive(item)
             flourish(item)
         }
     }
@@ -219,16 +240,16 @@ final class TransferManager: ObservableObject {
     func cancelTransfer(id: UUID) {
         if let index = activeTransfers.firstIndex(where: { $0.id == id }) {
             var item = activeTransfers.remove(at: index)
-            item.task?.cancel()
+            item.cancelHandler?()
             item.status = .cancelled
             samples[id] = nil
-            completedTransfers.insert(item, at: 0)
+            archive(item)
         }
     }
 
-    func setTask(id: UUID, task: Task<Void, Never>) {
+    func setCancelHandler(id: UUID, _ handler: @escaping @MainActor () -> Void) {
         if let index = activeTransfers.firstIndex(where: { $0.id == id }) {
-            activeTransfers[index].task = task
+            activeTransfers[index].cancelHandler = handler
         }
     }
 

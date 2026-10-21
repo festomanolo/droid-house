@@ -9,7 +9,15 @@ class ADBService: ObservableObject {
     @Published var selectedDevice: ADBDevice?
     @Published var isLoading: Bool = false
     @Published var lastError: String?
-    @Published var sortOrder: SortOrder = .name
+    /// A failed action (rename, upload, copy…). Shown as an alert over the
+    /// listing; `lastError` is reserved for "this folder could not be shown".
+    @Published var operationError: String?
+    @Published var sortOrder: SortOrder = .name {
+        didSet {
+            // Previously the new order only applied on the next folder load.
+            if sortOrder != oldValue { currentFiles = sortFiles(currentFiles) }
+        }
+    }
     @Published var storageInfo: [StorageInfo] = []
     @Published var bookmarks: [String] = []
     
@@ -58,7 +66,9 @@ class ADBService: ObservableObject {
             return
         }
 
-        connectedDevices = devices
+        // This runs every 4 s. Assigning an identical array still fires
+        // objectWillChange, which re-rendered the whole window each tick.
+        if devices != connectedDevices { connectedDevices = devices }
 
         // Selected device vanished from the list.
         if let current = selectedDevice, !devices.contains(where: { $0.id == current.id }) {
@@ -99,7 +109,7 @@ class ADBService: ObservableObject {
         refreshTask = nil
     }
     
-    struct StorageInfo: Identifiable, Codable {
+    struct StorageInfo: Identifiable, Codable, Equatable {
         let id: String
         let label: String
         let total: String
@@ -124,13 +134,13 @@ class ADBService: ObservableObject {
     // MARK: - Device Management
     
     func detectDevices() async {
-        isLoading = true
         lastError = nil
-        
+
         do {
             let output = try await runADBCommand(["devices", "-l"])
-            connectedDevices = parseDevices(output)
-            
+            let devices = parseDevices(output)
+            if devices != connectedDevices { connectedDevices = devices }
+
             // Auto-select first device if none selected
             if selectedDevice == nil, let first = connectedDevices.first {
                 selectedDevice = first
@@ -139,12 +149,11 @@ class ADBService: ObservableObject {
         } catch {
             lastError = "Failed to detect devices: \(error.localizedDescription)"
         }
-        
+
         if let device = selectedDevice {
+            lastStorageFetch = (device.id, Date())
             await fetchStorageInfo(device: device)
         }
-        
-        isLoading = false
     }
     
     private func parseDevices(_ output: String) -> [ADBDevice] {
@@ -187,34 +196,71 @@ class ADBService: ObservableObject {
     
     // MARK: - File Operations
     
+    /// Bumped per listing so a slow response for a folder the user already
+    /// left can't overwrite the folder they're looking at now.
+    private var listGeneration = 0
+    private var lastStorageFetch: (serial: String, date: Date)?
+
     func listFiles(path: String) async {
         guard let device = selectedDevice else {
             lastError = "No device selected"
             return
         }
-        
-        isLoading = true
+
+        listGeneration += 1
+        let generation = listGeneration
+
+        // Only swap the browser for a spinner when moving to a different
+        // folder. Refreshing in place (after an upload, rename or delete) used
+        // to blank the whole view for a round-trip.
+        let isRefresh = path == currentPath && !currentFiles.isEmpty
+        if !isRefresh { isLoading = true }
         lastError = nil
         currentPath = path
-        
+
+        let result: Result<[RemoteFile], Error>
         do {
-            // Use ls -laL to follow symlinks, fall back to ls -la if that fails
-            var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(Self.shellQuote(path))"))
-            // If the path itself is a symlink, ls -laL on it might fail or show weird results
-            // In that case, just list the directory contents
-            if output.contains("No such file") || output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                output = try await runADBCommand(shellArguments(device: device, "ls -la \(Self.shellQuote(path))"))
-            }
-            currentFiles = parseFileList(output, basePath: path)
+            result = .success(try await listing(device: device, path: path))
         } catch {
+            result = .failure(error)
+        }
+
+        guard generation == listGeneration else { return }
+
+        switch result {
+        case .success(let files):
+            if files != currentFiles { currentFiles = files }
+        case .failure(let error):
             lastError = "Failed to list files: \(error.localizedDescription)"
             currentFiles = []
         }
-        
-        await fetchStorageInfo(device: device)
         isLoading = false
+
+        refreshStorageInfoIfStale(device: device)
     }
-    
+
+    private func listing(device: ADBDevice, path: String) async throws -> [RemoteFile] {
+        let quoted = Self.shellQuote(path)
+        // -L follows symlinks so linked folders show as folders. `ls` exits
+        // non-zero if any single entry can't be read, but still lists the
+        // rest, so a non-zero status alone is not a failure here.
+        var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(quoted)"), allowFailure: true)
+        if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            output = try await runADBCommand(shellArguments(device: device, "ls -la \(quoted)"))
+        }
+        return parseFileList(output, basePath: path)
+    }
+
+    /// Storage barely changes between folder clicks; a `df` per navigation
+    /// doubled the latency of every click.
+    private func refreshStorageInfoIfStale(device: ADBDevice) {
+        if let last = lastStorageFetch, last.serial == device.id, Date().timeIntervalSince(last.date) < 20 {
+            return
+        }
+        lastStorageFetch = (device.id, Date())
+        Task { await fetchStorageInfo(device: device) }
+    }
+
     private func parseFileList(_ output: String, basePath: String) -> [RemoteFile] {
         var files: [RemoteFile] = []
         let lines = output.components(separatedBy: "\n")
@@ -262,8 +308,11 @@ class ADBService: ObservableObject {
             ))
         }
         
-        // Sort based on current sortOrder
-        files.sort { a, b in
+        return sortFiles(files)
+    }
+
+    private func sortFiles(_ files: [RemoteFile]) -> [RemoteFile] {
+        files.sorted { a, b in
             if a.isDirectory != b.isDirectory {
                 return a.isDirectory
             }
@@ -280,8 +329,6 @@ class ADBService: ObservableObject {
                 return (a.name as NSString).pathExtension.localizedCaseInsensitiveCompare((b.name as NSString).pathExtension) == .orderedAscending
             }
         }
-        
-        return files
     }
     
     /// Lists only the sub-directories at a path, without touching the main
@@ -289,11 +336,7 @@ class ADBService: ObservableObject {
     func listDirectories(at path: String) async -> [RemoteFile] {
         guard let device = selectedDevice else { return [] }
         do {
-            var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(Self.shellQuote(path))"), timeout: 20)
-            if output.contains("No such file") || output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                output = try await runADBCommand(shellArguments(device: device, "ls -la \(Self.shellQuote(path))"), timeout: 20)
-            }
-            return parseFileList(output, basePath: path)
+            return try await listing(device: device, path: path)
                 .filter { $0.isDirectory }
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         } catch {
@@ -314,7 +357,11 @@ class ADBService: ObservableObject {
     
     // MARK: - File Transfer
     
-    func pullFile(remotePath: String, localPath: String) async throws {
+    /// Copies a file or folder from the device to the Mac.
+    ///
+    /// - Parameter tracksProgress: `false` for incidental pulls (inspector
+    ///   previews) that should not show up as user transfers.
+    func pullFile(remotePath: String, localPath: String, tracksProgress: Bool = true) async throws {
         guard let device = selectedDevice else {
             throw ADBError.noDevice
         }
@@ -325,8 +372,20 @@ class ADBService: ObservableObject {
         // Remove any stale file so a partial previous pull can't masquerade.
         try? FileManager.default.removeItem(atPath: localPath)
 
+        let arguments = ["-s", device.id, "pull", "-a", remotePath, localPath]
+
+        guard tracksProgress else {
+            do {
+                _ = try await runADBCommand(arguments, timeout: nil)
+            } catch {
+                try? FileManager.default.removeItem(atPath: localPath)
+                throw error
+            }
+            return
+        }
+
         // Probe the remote size up-front so the bar fills against a real total.
-        let total = await remoteFileSize(device: device, path: remotePath)
+        let total = await remotePayloadSize(device: device, path: remotePath)
 
         let transferID = TransferManager.shared.startTransfer(
             type: .download,
@@ -337,11 +396,14 @@ class ADBService: ObservableObject {
         )
 
         let poller = pollLocalBytes(path: localPath, transferID: transferID)
+        defer { poller.cancel() }
 
         do {
             // `-a` preserves the file's modification timestamp on the Mac side.
-            _ = try await runADBCommand(["-s", device.id, "pull", "-a", remotePath, localPath], timeout: 600)
-            poller.cancel()
+            // No timeout: a multi-gigabyte video over Wi-Fi can take far longer
+            // than any fixed limit, and the old 600 s cap killed such pulls
+            // mid-stream. The user cancels from the transfer pill instead.
+            try await runTracked(arguments, transferID: transferID)
 
             guard FileManager.default.fileExists(atPath: localPath) else {
                 throw ADBError.commandFailed("adb reported success but no file was written.")
@@ -349,69 +411,128 @@ class ADBService: ObservableObject {
 
             // Settle on the byte count actually on disk, so the bar lands on a
             // measured 100% rather than an assumed one.
-            let written = ((try? FileManager.default.attributesOfItem(atPath: localPath))?[.size] as? Int64) ?? total ?? 0
+            let written = await Self.localBytes(at: localPath)
             TransferManager.shared.setTotalBytes(id: transferID, totalBytes: total ?? written)
             TransferManager.shared.updateBytes(id: transferID, bytesTransferred: written)
             TransferManager.shared.completeTransfer(id: transferID)
         } catch {
-            poller.cancel()
-            TransferManager.shared.failTransfer(id: transferID, error: error.localizedDescription)
+            try? FileManager.default.removeItem(atPath: localPath)
+            if !(error is CancellationError) {
+                TransferManager.shared.failTransfer(id: transferID, error: error.localizedDescription)
+            }
             throw error
         }
     }
-    
-    func pushFile(localPath: String, remotePath: String) async throws {
+
+    /// Copies a file or folder from the Mac into `remotePath` on the device.
+    ///
+    /// Folders go up in a single `adb push`, which pipelines the whole tree
+    /// over one sync connection — far faster than one process per file.
+    ///
+    /// - Parameter refreshListing: Pass `false` when pushing a batch, then
+    ///   refresh once at the end. Refreshing after every file re-listed the
+    ///   folder and re-queried storage hundreds of times for a large upload.
+    func pushFile(localPath: String, remotePath: String, refreshListing: Bool = true) async throws {
         guard let device = selectedDevice else {
             throw ADBError.noDevice
         }
-        
+
         let fileName = (localPath as NSString).lastPathComponent
-        let total = (try? FileManager.default.attributesOfItem(atPath: localPath))?[.size] as? Int64
+        let total = await Self.localBytes(at: localPath)
 
         let transferID = TransferManager.shared.startTransfer(
             type: .upload,
             fileName: fileName,
             source: localPath,
             destination: remotePath,
-            totalBytes: total
+            totalBytes: total > 0 ? total : nil
         )
 
         let destFile = remotePath.hasSuffix("/") ? "\(remotePath)\(fileName)" : "\(remotePath)/\(fileName)"
         let poller = pollRemoteBytes(device: device, path: destFile, transferID: transferID)
+        defer { poller.cancel() }
 
         do {
-            _ = try await runADBCommand(["-s", device.id, "push", localPath, remotePath], timeout: 600)
+            try await runTracked(["-s", device.id, "push", localPath, remotePath], transferID: transferID)
             poller.cancel()
-            if let total {
+            if total > 0 {
                 TransferManager.shared.updateBytes(id: transferID, bytesTransferred: total)
             }
             TransferManager.shared.completeTransfer(id: transferID)
-            await listFiles(path: currentPath) // Refresh
         } catch {
-            poller.cancel()
-            TransferManager.shared.failTransfer(id: transferID, error: error.localizedDescription)
+            if !(error is CancellationError) {
+                TransferManager.shared.failTransfer(id: transferID, error: error.localizedDescription)
+            }
             throw error
         }
+
+        if refreshListing {
+            await refreshCurrentFolder()
+        }
+    }
+
+    /// Re-lists the folder on screen without blanking it.
+    func refreshCurrentFolder() async {
+        await listFiles(path: currentPath)
     }
 
     // MARK: - Transfer progress helpers
 
-    /// Reads a remote file's byte size (best-effort) for progress calculation.
-    private func remoteFileSize(device: ADBDevice, path: String) async -> Int64? {
-        guard let out = try? await runADBCommand(shellArguments(device: device, "stat -c %s \(Self.shellQuote(path))"), timeout: 10) else {
-            return nil
+    /// Runs a transfer's adb command as a child task the transfer pill can
+    /// cancel. Cancelling terminates adb itself; previously the pill only
+    /// removed the row while adb kept copying in the background.
+    private func runTracked(_ arguments: [String], transferID: UUID) async throws {
+        let work = Task { try await self.runADBCommand(arguments, timeout: nil) }
+        TransferManager.shared.setCancelHandler(id: transferID) { work.cancel() }
+        _ = try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
         }
-        return Int64(out.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    /// Watches the destination file grow on the Mac and streams the byte count
+    /// Byte size of a remote file, or the recursive size of a folder.
+    private func remotePayloadSize(device: ADBDevice, path: String) async -> Int64? {
+        let quoted = Self.shellQuote(path)
+        let command = "if [ -d \(quoted) ]; then echo D $(du -sk \(quoted) 2>/dev/null | cut -f1); else echo F $(stat -c %s \(quoted)); fi"
+        guard let out = try? await runADBCommand(shellArguments(device: device, command), timeout: 15, allowFailure: true) else {
+            return nil
+        }
+        let parts = out.split(whereSeparator: \.isWhitespace)
+        guard parts.count == 2, let value = Int64(parts[1]) else { return nil }
+        return parts[0] == "D" ? value * 1024 : value
+    }
+
+    /// Size of a local file, or the recursive size of a folder. Runs off the
+    /// main thread because walking a folder can take a while.
+    nonisolated static func localBytes(at path: String) async -> Int64 {
+        await Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            var isDirectory: ObjCBool = false
+            guard fm.fileExists(atPath: path, isDirectory: &isDirectory) else { return 0 }
+            guard isDirectory.boolValue else {
+                return ((try? fm.attributesOfItem(atPath: path))?[.size] as? Int64) ?? 0
+            }
+            var total: Int64 = 0
+            let keys: [URLResourceKey] = [.fileSizeKey, .isRegularFileKey]
+            let enumerator = fm.enumerator(at: URL(fileURLWithPath: path), includingPropertiesForKeys: keys)
+            while let url = enumerator?.nextObject() as? URL {
+                guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+                total += Int64(values.fileSize ?? 0)
+            }
+            return total
+        }.value
+    }
+
+    /// Watches the destination grow on the Mac and streams the byte count
     /// into the transfer, which is what actually drives the progress fill.
     private func pollLocalBytes(path: String, transferID: UUID) -> Task<Void, Never> {
         Task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(200))
                 guard !Task.isCancelled else { return }
-                let size = ((try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int64) ?? 0
+                let size = await Self.localBytes(at: path)
+                guard !Task.isCancelled else { return }
                 TransferManager.shared.updateBytes(id: transferID, bytesTransferred: size)
             }
         }
@@ -419,19 +540,19 @@ class ADBService: ObservableObject {
 
     /// Same idea in the other direction: polls the file materialising on the
     /// device. adb is stat'ed less aggressively because each probe is a shell
-    /// round-trip over USB/Wi-Fi.
+    /// round-trip over USB/Wi-Fi that competes with the push itself.
     private func pollRemoteBytes(device: ADBDevice, path: String, transferID: UUID) -> Task<Void, Never> {
         Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(280))
+                try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled, let self else { return }
-                let size = await self.remoteFileSize(device: device, path: path) ?? 0
+                let size = await self.remotePayloadSize(device: device, path: path) ?? 0
                 guard !Task.isCancelled else { return }
                 TransferManager.shared.updateBytes(id: transferID, bytesTransferred: size)
             }
         }
     }
-    
+
     // MARK: - File Management
     
     func deleteFile(path: String) async throws {
@@ -554,11 +675,15 @@ class ADBService: ObservableObject {
         guard let device = selectedDevice else {
             throw ADBError.noDevice
         }
-        
-        for file in files {
-            _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(Self.shellQuote(file.fullPath))"))
+
+        // One shell round-trip per batch instead of one per file; chunked so a
+        // huge selection stays under the shell's argument limit.
+        let paths = files.map { Self.shellQuote($0.fullPath) }
+        for start in stride(from: 0, to: paths.count, by: 100) {
+            let chunk = paths[start..<min(start + 100, paths.count)].joined(separator: " ")
+            _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(chunk)"), timeout: 120)
         }
-        
+
         await listFiles(path: currentPath)
     }
     
@@ -639,7 +764,8 @@ class ADBService: ObservableObject {
     func fetchStorageInfo(device: ADBDevice) async {
         do {
             let output = try await runADBCommand(["-s", device.id, "shell", "df", "-h"])
-            self.storageInfo = parseStorage(output)
+            let info = parseStorage(output)
+            if info != storageInfo { storageInfo = info }
         } catch {
             print("Failed to fetch storage info: \(error)")
         }
@@ -692,38 +818,22 @@ class ADBService: ObservableObject {
     
     func fetchFileDataFast(path: String, maxSize: Int? = nil) async throws -> Data {
         guard let device = selectedDevice else { throw ADBError.noDevice }
-        let adb = adbPath
-        let deviceID = device.id
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                
-                // Single quotes, not double: a double-quoted path still lets the
-                // device shell expand $, ` and \, so a filename containing any
-                // of them would read the wrong file or nothing at all.
-                let quoted = ADBService.shellQuote(path)
-                var command = "cat \(quoted)"
-                if let max = maxSize {
-                    command = "dd if=\(quoted) bs=1k count=\(max / 1024) 2>/dev/null"
-                }
-                
-                process.arguments = [adb, "-s", deviceID, "exec-out", command]
-                
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                
-                do {
-                    try process.run()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    continuation.resume(returning: data)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
+
+        // Single quotes, not double: a double-quoted path still lets the
+        // device shell expand $, ` and \, so a filename containing any
+        // of them would read the wrong file or nothing at all.
+        let quoted = ADBService.shellQuote(path)
+        var command = "cat \(quoted)"
+        if let max = maxSize {
+            command = "dd if=\(quoted) bs=1k count=\(max / 1024) 2>/dev/null"
         }
+
+        let output = try await ADBProcess.run(
+            adb: adbPath,
+            arguments: ["-s", device.id, "exec-out", command],
+            timeout: 120
+        )
+        return output.stdout
     }
     
     // MARK: - Remote shell quoting
@@ -751,64 +861,21 @@ class ADBService: ObservableObject {
 
     // MARK: - ADB Command Execution
 
-    private func runADBCommand(_ arguments: [String], timeout: TimeInterval = 30) async throws -> String {
-        let adb = adbPath
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = [adb] + arguments
-
-                let pipe = Pipe()
-                let errorPipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = errorPipe
-
-                // Guard against a hung adb server / unresponsive device by
-                // terminating the process once the timeout elapses.
-                let resumed = NSLock()
-                var didResume = false
-                func resumeOnce(_ block: () -> Void) {
-                    resumed.lock(); defer { resumed.unlock() }
-                    guard !didResume else { return }
-                    didResume = true
-                    block()
-                }
-
-                let timeoutSource = DispatchSource.makeTimerSource(queue: .global())
-                timeoutSource.schedule(deadline: .now() + timeout)
-                timeoutSource.setEventHandler {
-                    if process.isRunning { process.terminate() }
-                    resumeOnce {
-                        continuation.resume(throwing: ADBError.timedOut(timeout))
-                    }
-                }
-                timeoutSource.resume()
-
-                do {
-                    try process.run()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    timeoutSource.cancel()
-
-                    if process.terminationStatus != 0 {
-                        let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                        resumeOnce {
-                            continuation.resume(throwing: ADBError.commandFailed(errorString.trimmingCharacters(in: .whitespacesAndNewlines)))
-                        }
-                    } else {
-                        let output = String(data: data, encoding: .utf8) ?? ""
-                        resumeOnce { continuation.resume(returning: output) }
-                    }
-                } catch {
-                    timeoutSource.cancel()
-                    resumeOnce {
-                        continuation.resume(throwing: ADBError.processError(error.localizedDescription))
-                    }
-                }
-            }
+    /// Runs adb and returns stdout.
+    ///
+    /// - Parameters:
+    ///   - timeout: Hard limit, or `nil` for long transfers that must not be
+    ///     killed mid-stream.
+    ///   - allowFailure: Return stdout even on a non-zero exit. `ls` exits 1
+    ///     when a single entry is unreadable (a broken symlink, say) while
+    ///     still printing every other entry, so treating that as fatal used to
+    ///     blank whole folders.
+    private func runADBCommand(_ arguments: [String], timeout: TimeInterval? = 30, allowFailure: Bool = false) async throws -> String {
+        let output = try await ADBProcess.run(adb: adbPath, arguments: arguments, timeout: timeout)
+        guard output.status == 0 || allowFailure else {
+            throw ADBError.commandFailed(output.errorText)
         }
+        return output.stdoutString
     }
     
     // MARK: - Bookmarks

@@ -3,7 +3,7 @@ import QuickLook
 
 struct ScreenshotGalleryView: View {
     @ObservedObject var companionSync = CompanionSync.shared
-    @ObservedObject var thumbnails = ThumbnailManager.shared
+    private let thumbnails = ThumbnailManager.shared
     @ObservedObject var adbService: ADBService
 
     @State private var isRefreshing = false
@@ -230,8 +230,9 @@ private struct ScreenshotCard: View {
     let onCopy: () -> Void
     let onSave: () -> Void
 
-    @ObservedObject private var thumbnails = ThumbnailManager.shared
+    private let thumbnails = ThumbnailManager.shared
     @State private var isHovering = false
+    @State private var thumbnail: NSImage?
 
     private var fileName: String {
         (item.remotePath as NSString).lastPathComponent
@@ -265,10 +266,7 @@ private struct ScreenshotCard: View {
                 .fill(Color.primary.opacity(0.06))
                 .aspectRatio(9.0 / 16.0, contentMode: .fit)
 
-            // Asking the manager on every render is intentional: it returns the
-            // cached image immediately once ready and publishes a change when a
-            // fetch completes.
-            if let image = thumbnails.thumbnail(forRemotePath: item.remotePath, adbService: adbService) {
+            if let image = thumbnail ?? thumbnails.cachedThumbnail(forRemotePath: item.remotePath) {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -298,6 +296,9 @@ private struct ScreenshotCard: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .cursor(.zoomIn)
+        .task(id: item.remotePath) {
+            thumbnail = await thumbnails.thumbnail(forRemotePath: item.remotePath, adbService: adbService)
+        }
     }
 
     private var overlayActions: some View {
