@@ -9,7 +9,12 @@ class ADBService: ObservableObject {
     @Published var selectedDevice: ADBDevice?
     @Published var isLoading: Bool = false
     @Published var lastError: String?
-    @Published var sortOrder: SortOrder = .name
+    @Published var sortOrder: SortOrder = .name {
+        didSet {
+            // Previously the new order only applied on the next folder load.
+            if sortOrder != oldValue { currentFiles = sortFiles(currentFiles) }
+        }
+    }
     @Published var storageInfo: [StorageInfo] = []
     @Published var bookmarks: [String] = []
     
@@ -58,7 +63,9 @@ class ADBService: ObservableObject {
             return
         }
 
-        connectedDevices = devices
+        // This runs every 4 s. Assigning an identical array still fires
+        // objectWillChange, which re-rendered the whole window each tick.
+        if devices != connectedDevices { connectedDevices = devices }
 
         // Selected device vanished from the list.
         if let current = selectedDevice, !devices.contains(where: { $0.id == current.id }) {
@@ -99,7 +106,7 @@ class ADBService: ObservableObject {
         refreshTask = nil
     }
     
-    struct StorageInfo: Identifiable, Codable {
+    struct StorageInfo: Identifiable, Codable, Equatable {
         let id: String
         let label: String
         let total: String
@@ -124,13 +131,13 @@ class ADBService: ObservableObject {
     // MARK: - Device Management
     
     func detectDevices() async {
-        isLoading = true
         lastError = nil
-        
+
         do {
             let output = try await runADBCommand(["devices", "-l"])
-            connectedDevices = parseDevices(output)
-            
+            let devices = parseDevices(output)
+            if devices != connectedDevices { connectedDevices = devices }
+
             // Auto-select first device if none selected
             if selectedDevice == nil, let first = connectedDevices.first {
                 selectedDevice = first
@@ -139,12 +146,11 @@ class ADBService: ObservableObject {
         } catch {
             lastError = "Failed to detect devices: \(error.localizedDescription)"
         }
-        
+
         if let device = selectedDevice {
+            lastStorageFetch = (device.id, Date())
             await fetchStorageInfo(device: device)
         }
-        
-        isLoading = false
     }
     
     private func parseDevices(_ output: String) -> [ADBDevice] {
@@ -187,34 +193,71 @@ class ADBService: ObservableObject {
     
     // MARK: - File Operations
     
+    /// Bumped per listing so a slow response for a folder the user already
+    /// left can't overwrite the folder they're looking at now.
+    private var listGeneration = 0
+    private var lastStorageFetch: (serial: String, date: Date)?
+
     func listFiles(path: String) async {
         guard let device = selectedDevice else {
             lastError = "No device selected"
             return
         }
-        
-        isLoading = true
+
+        listGeneration += 1
+        let generation = listGeneration
+
+        // Only swap the browser for a spinner when moving to a different
+        // folder. Refreshing in place (after an upload, rename or delete) used
+        // to blank the whole view for a round-trip.
+        let isRefresh = path == currentPath && !currentFiles.isEmpty
+        if !isRefresh { isLoading = true }
         lastError = nil
         currentPath = path
-        
+
+        let result: Result<[RemoteFile], Error>
         do {
-            // Use ls -laL to follow symlinks, fall back to ls -la if that fails
-            var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(Self.shellQuote(path))"))
-            // If the path itself is a symlink, ls -laL on it might fail or show weird results
-            // In that case, just list the directory contents
-            if output.contains("No such file") || output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                output = try await runADBCommand(shellArguments(device: device, "ls -la \(Self.shellQuote(path))"))
-            }
-            currentFiles = parseFileList(output, basePath: path)
+            result = .success(try await listing(device: device, path: path))
         } catch {
+            result = .failure(error)
+        }
+
+        guard generation == listGeneration else { return }
+
+        switch result {
+        case .success(let files):
+            if files != currentFiles { currentFiles = files }
+        case .failure(let error):
             lastError = "Failed to list files: \(error.localizedDescription)"
             currentFiles = []
         }
-        
-        await fetchStorageInfo(device: device)
         isLoading = false
+
+        refreshStorageInfoIfStale(device: device)
     }
-    
+
+    private func listing(device: ADBDevice, path: String) async throws -> [RemoteFile] {
+        let quoted = Self.shellQuote(path)
+        // -L follows symlinks so linked folders show as folders. `ls` exits
+        // non-zero if any single entry can't be read, but still lists the
+        // rest, so a non-zero status alone is not a failure here.
+        var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(quoted)"), allowFailure: true)
+        if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            output = try await runADBCommand(shellArguments(device: device, "ls -la \(quoted)"))
+        }
+        return parseFileList(output, basePath: path)
+    }
+
+    /// Storage barely changes between folder clicks; a `df` per navigation
+    /// doubled the latency of every click.
+    private func refreshStorageInfoIfStale(device: ADBDevice) {
+        if let last = lastStorageFetch, last.serial == device.id, Date().timeIntervalSince(last.date) < 20 {
+            return
+        }
+        lastStorageFetch = (device.id, Date())
+        Task { await fetchStorageInfo(device: device) }
+    }
+
     private func parseFileList(_ output: String, basePath: String) -> [RemoteFile] {
         var files: [RemoteFile] = []
         let lines = output.components(separatedBy: "\n")
@@ -262,8 +305,11 @@ class ADBService: ObservableObject {
             ))
         }
         
-        // Sort based on current sortOrder
-        files.sort { a, b in
+        return sortFiles(files)
+    }
+
+    private func sortFiles(_ files: [RemoteFile]) -> [RemoteFile] {
+        files.sorted { a, b in
             if a.isDirectory != b.isDirectory {
                 return a.isDirectory
             }
@@ -280,8 +326,6 @@ class ADBService: ObservableObject {
                 return (a.name as NSString).pathExtension.localizedCaseInsensitiveCompare((b.name as NSString).pathExtension) == .orderedAscending
             }
         }
-        
-        return files
     }
     
     /// Lists only the sub-directories at a path, without touching the main
@@ -289,11 +333,7 @@ class ADBService: ObservableObject {
     func listDirectories(at path: String) async -> [RemoteFile] {
         guard let device = selectedDevice else { return [] }
         do {
-            var output = try await runADBCommand(shellArguments(device: device, "ls -laL \(Self.shellQuote(path))"), timeout: 20)
-            if output.contains("No such file") || output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                output = try await runADBCommand(shellArguments(device: device, "ls -la \(Self.shellQuote(path))"), timeout: 20)
-            }
-            return parseFileList(output, basePath: path)
+            return try await listing(device: device, path: path)
                 .filter { $0.isDirectory }
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         } catch {
@@ -717,7 +757,8 @@ class ADBService: ObservableObject {
     func fetchStorageInfo(device: ADBDevice) async {
         do {
             let output = try await runADBCommand(["-s", device.id, "shell", "df", "-h"])
-            self.storageInfo = parseStorage(output)
+            let info = parseStorage(output)
+            if info != storageInfo { storageInfo = info }
         } catch {
             print("Failed to fetch storage info: \(error)")
         }
