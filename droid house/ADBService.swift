@@ -203,8 +203,15 @@ class ADBService: ObservableObject {
             lastError = "No device selected"
             return
         }
-        
-        isLoading = true
+
+        listGeneration += 1
+        let generation = listGeneration
+
+        // Only swap the browser for a spinner when moving to a different
+        // folder. Refreshing in place (after an upload, rename or delete) used
+        // to blank the whole view for a round-trip.
+        let isRefresh = path == currentPath && !currentFiles.isEmpty
+        if !isRefresh { isLoading = true }
         lastError = nil
         currentPath = path
         
