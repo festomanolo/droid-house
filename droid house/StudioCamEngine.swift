@@ -672,14 +672,7 @@ final class StudioCamEngine: NSObject, ObservableObject {
     /// it broke outright when adb was only resolvable by name.
     private func runADB(_ arguments: [String]) async -> String? {
         guard let output = try? await ADBProcess.run(adb: adbPath, arguments: arguments),
-                process.standardError = pipe
-
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    if process.terminationStatus == 0 {
-                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                        continuation.resume(returning: String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines))
+              output.status == 0 else { return nil }
                     } else {
                         continuation.resume(returning: nil)
                     }
