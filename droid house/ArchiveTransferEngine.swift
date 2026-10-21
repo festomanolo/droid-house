@@ -285,6 +285,7 @@ final class ArchiveTransferEngine: ObservableObject {
         process.standardError = errPipe
 
         worker = process
+        let counter = self.counter
 
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
