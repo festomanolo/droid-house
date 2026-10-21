@@ -289,7 +289,11 @@ final class ArchiveTransferEngine: ObservableObject {
 
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            guard let text = String(data: data, encoding: .utf8) else { return }
             Task { @MainActor [weak self] in self?.appendLog(text.trimmingCharacters(in: .whitespacesAndNewlines), isError: false) }
         }
         errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
