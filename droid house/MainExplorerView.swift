@@ -660,7 +660,11 @@ struct MainExplorerView: View {
                 Button("Rename") {
                     if let file = fileToRename {
                         Task {
-                            try? await adbService.renameFile(oldPath: file.fullPath, newName: renameText)
+                            do {
+                                try await adbService.renameFile(oldPath: file.fullPath, newName: renameText)
+                            } catch {
+                                adbService.operationError = "Couldn't rename “\(file.name)”: \(error.localizedDescription)"
+                            }
                             showRenameSheet = false
                         }
                     }
