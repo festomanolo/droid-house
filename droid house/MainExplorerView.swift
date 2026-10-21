@@ -739,7 +739,7 @@ struct MainExplorerView: View {
                 pasteboard.writeObjects([tempFile as NSURL])
             } catch is CancellationError {
             } catch {
-                adbService.lastError = "Failed to copy: \(error.localizedDescription)"
+                adbService.operationError = "Couldn't copy to the Mac: \(error.localizedDescription)"
             }
         }
     }
