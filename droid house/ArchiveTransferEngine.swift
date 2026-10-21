@@ -210,8 +210,7 @@ final class ArchiveTransferEngine: ObservableObject {
                 return
             }
             try? sink.write(contentsOf: chunk)
-            let count = Int64(chunk.count)
-            Task { @MainActor [weak self] in self?.advance(by: count) }
+            counter.add(Int64(chunk.count))
         }
 
         // Remote/adb errors (permission denied, connection dropped …).
