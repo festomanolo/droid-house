@@ -125,8 +125,10 @@ final class ArchiveTransferEngine: ObservableObject {
         phase = .preparing
         appendLog("Backing up \(relativePaths.count) location(s) from \(remoteRoot)", isError: false)
 
-        // Build:  cd <root> && tar -cf - "p1" "p2" …
-        let quoted = relativePaths.map { "\"\($0)\"" }.joined(separator: " ")
+        // Build:  cd <root> && tar -cf - 'p1' 'p2' …
+        // Single quotes: inside double quotes the device shell still expands
+        // $, ` and \, so a folder named with any of them archived the wrong path.
+        let quoted = relativePaths.map(shellQuote).joined(separator: " ")
         let remoteCommand = "cd \(shellQuote(remoteRoot)) && tar -cf - \(quoted)"
         let arguments = ["-s", serial, "exec-out", remoteCommand]
 
