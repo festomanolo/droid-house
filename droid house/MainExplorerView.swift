@@ -763,6 +763,7 @@ struct MainExplorerView: View {
                     pasteboard.clearContents()
                     pasteboard.writeObjects(urls)
                 }
+            } catch is CancellationError {
             } catch {
                 adbService.lastError = "Failed to copy: \(error.localizedDescription)"
             }
