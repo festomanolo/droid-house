@@ -31,7 +31,6 @@ struct MainExplorerView: View {
     @Binding var uploadStatusText: String
     @Binding var selectedFile: RemoteFile?
 
-    @State private var hoveredFileID: RemoteFile.ID?
     @State private var selectedFileIDs: Set<RemoteFile.ID> = []
     @State private var showNewFolderSheet = false
     @State private var newFolderName = ""
@@ -106,10 +105,6 @@ struct MainExplorerView: View {
                 NSEvent.removeMonitor(monitor)
                 keyMonitor = nil
             }
-        }
-        .onChange(of: adbService.currentFiles) { _, files in
-            // Warm the thumbnail cache ahead of scrolling.
-            ThumbnailManager.shared.prefetchThumbnails(for: files, adbService: adbService)
         }
         .quickLookPreview($previewURL)
     }
@@ -372,12 +367,8 @@ struct MainExplorerView: View {
                     ForEach(filteredFiles) { file in
                         FileGridCell(
                             file: file,
-                            isHovering: hoveredFileID == file.id,
                             isSelected: selectedFileIDs.contains(file.id),
                             adbService: adbService,
-                            onHover: { hovering in
-                                hoveredFileID = hovering ? file.id : nil
-                            },
                             onOpen: {
                                 handleOpen(file)
                             },
@@ -924,17 +915,17 @@ private func colorFromName(_ name: String) -> Color {
 
 struct FileGridCell<MenuContent: View>: View {
     let file: RemoteFile
-    let isHovering: Bool
     let isSelected: Bool
     let adbService: ADBService
-    let onHover: (Bool) -> Void
     let onOpen: () -> Void
     let onSelect: (Bool) -> Void
     @ViewBuilder let contextMenu: () -> MenuContent
-    
-    @ObservedObject private var thumbnailManager = ThumbnailManager.shared
+
+    // Hover lives in the cell: held by the parent, every mouse move across
+    // the grid re-rendered every cell in it.
+    @State private var isHovering = false
+    @State private var thumbnail: NSImage?
     @AppStorage("folderIconColor") private var folderIconColor: String = "blue"
-    @AppStorage("appThemeColor") private var appThemeColor: String = "blue"
 
     var body: some View {
         VStack(alignment: .center, spacing: 6) {
@@ -943,7 +934,7 @@ struct FileGridCell<MenuContent: View>: View {
                     .fill(.quaternary.opacity(0.3))
                     .frame(height: 70)
                 
-                if let thumb = thumbnailManager.getThumbnail(for: file, adbService: adbService) {
+                if let thumb = thumbnail ?? ThumbnailManager.shared.cachedThumbnail(for: file) {
                     Image(nsImage: thumb)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -971,7 +962,11 @@ struct FileGridCell<MenuContent: View>: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(isSelected ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
         )
-        .onHover(perform: onHover)
+        .onHover { isHovering = $0 }
+        .task(id: file.id) {
+            guard ThumbnailManager.supportsThumbnail(file) else { return }
+            thumbnail = await ThumbnailManager.shared.thumbnail(for: file, adbService: adbService)
+        }
         .onTapGesture(count: 2, perform: onOpen)
         .simultaneousGesture(
             TapGesture()
@@ -1083,9 +1078,8 @@ struct PhotoCell<MenuContent: View>: View {
     let onSelect: (Bool) -> Void
     @ViewBuilder let contextMenu: () -> MenuContent
     let adbService: ADBService
-    
-    @ObservedObject private var thumbnailManager = ThumbnailManager.shared
-    @AppStorage("appThemeColor") private var appThemeColor: String = "blue"
+
+    @State private var thumbnail: NSImage?
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -1094,7 +1088,7 @@ struct PhotoCell<MenuContent: View>: View {
                     .fill(.quaternary.opacity(0.3))
                     .aspectRatio(1, contentMode: .fit)
                 
-                if let thumb = thumbnailManager.getThumbnail(for: file, adbService: adbService) {
+                if let thumb = thumbnail ?? ThumbnailManager.shared.cachedThumbnail(for: file) {
                     Image(nsImage: thumb)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -1116,6 +1110,10 @@ struct PhotoCell<MenuContent: View>: View {
             }
         }
         .clipped()
+        .task(id: file.id) {
+            guard ThumbnailManager.supportsThumbnail(file) else { return }
+            thumbnail = await ThumbnailManager.shared.thumbnail(for: file, adbService: adbService)
+        }
         .onTapGesture(count: 2, perform: onOpen)
         .simultaneousGesture(
             TapGesture()

@@ -58,7 +58,7 @@ struct FilePreviewPanel: View {
                 
                 if isLoadingThumbnail || isDownloadingPreview {
                     ProgressView()
-                } else if let image = thumbnailImage ?? ThumbnailManager.shared.getThumbnail(for: file, adbService: adbService) {
+                } else if let image = thumbnailImage ?? ThumbnailManager.shared.cachedThumbnail(for: file) {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
