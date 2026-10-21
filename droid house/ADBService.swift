@@ -232,6 +232,8 @@ class ADBService: ObservableObject {
             currentFiles = []
         }
         isLoading = false
+
+        refreshStorageInfoIfStale(device: device)
     }
     
     private func parseFileList(_ output: String, basePath: String) -> [RemoteFile] {
