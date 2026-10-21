@@ -540,7 +540,7 @@ struct MainExplorerView: View {
 
             if !adbService.clipboard.isEmpty {
                 Button("Paste (\(adbService.clipboard.count))") {
-                    Task { try? await adbService.paste() }
+                    runOperation("paste") { try await adbService.paste() }
                 }
                 .keyboardShortcut("v", modifiers: .command)
             }
