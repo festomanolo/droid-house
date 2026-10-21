@@ -220,8 +220,9 @@ final class ArchiveTransferEngine: ObservableObject {
             Task { @MainActor [weak self] in self?.ingestError(text) }
         }
 
-        process.terminationHandler = { [weak self] proc in
-            outPipe.fileHandleForReading.readabilityHandler = nil
+        process.terminationHandler = { _ in done.leave() }
+
+        done.notify(queue: .main) { [weak self] in
             errPipe.fileHandleForReading.readabilityHandler = nil
             try? sink.close()
             let status = proc.terminationStatus
