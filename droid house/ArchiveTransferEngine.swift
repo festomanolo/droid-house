@@ -205,6 +205,8 @@ final class ArchiveTransferEngine: ObservableObject {
             let chunk = handle.availableData
             guard !chunk.isEmpty else {
                 handle.readabilityHandler = nil
+                try? sink.close()
+                done.leave()
                 return
             }
             try? sink.write(contentsOf: chunk)
