@@ -292,15 +292,6 @@ final class AeroCastController: ObservableObject {
     }
 
     private func runADB(_ arguments: [String]) async -> String? {
-                do {
-                    try process.run()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    continuation.resume(returning: String(data: data, encoding: .utf8))
-                } catch {
-                    continuation.resume(returning: nil)
-                }
-            }
-        }
+        (try? await ADBProcess.run(adb: adbPath, arguments: arguments))?.stdoutString
     }
 }
