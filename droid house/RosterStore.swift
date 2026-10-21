@@ -416,15 +416,6 @@ final class RosterStore: ObservableObject {
     // MARK: ADB
 
     private func runADB(_ arguments: [String], timeout: TimeInterval) async throws -> String {
-        let adb = adbPath
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = [adb] + arguments
-
-                let pipe = Pipe()
-                let errorPipe = Pipe()
                 process.standardOutput = pipe
                 process.standardError = errorPipe
 
