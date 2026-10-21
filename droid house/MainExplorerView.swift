@@ -906,7 +906,11 @@ struct MainExplorerView: View {
     private func deleteSelectedFiles() {
         let targets = selectedFiles
         Task {
-            try? await adbService.deleteFiles(selectedFiles)
+            do {
+                try await adbService.deleteFiles(targets)
+            } catch {
+                adbService.operationError = "Couldn't delete: \(error.localizedDescription)"
+            }
             selectedFileIDs.removeAll()
             selectedFile = nil
         }
