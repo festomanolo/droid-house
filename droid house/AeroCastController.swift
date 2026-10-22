@@ -25,6 +25,13 @@ import AppKit
 //     rather than per event, and
 //   • **coalescing** of drag samples, so a fast swipe becomes one `input swipe`
 //     instead of a queue of taps we could never keep up with.
+//
+// ## Without adb
+//
+// A phone paired over Wi-Fi has no shell to type into. There each event goes
+// to the companion's `/api/input`, which replays it through its Accessibility
+// service (gestures, global actions, editing the focused field). Events are
+// posted strictly in order so typed text never arrives scrambled.
 
 @MainActor
 final class AeroCastController: ObservableObject {
@@ -43,6 +50,11 @@ final class AeroCastController: ObservableObject {
     private var shellProcess: Process?
     private var shellInput: FileHandle?
 
+    /// Set when controlling a Wi-Fi companion instead of an adb shell.
+    private var inputEndpoint: CompanionEndpoint?
+    /// Tail of the in-flight input posts; each new one waits on it.
+    private var inputChain: Task<Void, Never>?
+
     /// Serialises writes to the shell's stdin from the main actor.
     private var writeQueue = DispatchQueue(label: "com.droidhouse.aerocast.control")
 
@@ -57,6 +69,12 @@ final class AeroCastController: ObservableObject {
         detach()
 
         self.serial = serial
+
+        if let endpoint = CompanionLink.wifiEndpoint(for: serial) {
+            await attachOverWiFi(endpoint)
+            return
+        }
+
         deviceSize = await fetchPhysicalSize(serial: serial)
 
         // One long-lived interactive shell. Every subsequent event is a line
@@ -83,7 +101,30 @@ final class AeroCastController: ObservableObject {
         }
     }
 
+    private struct DisplayReply: Decodable {
+        let width: Int
+        let height: Int
+        let inputReady: Bool
+    }
+
+    private func attachOverWiFi(_ endpoint: CompanionEndpoint) async {
+        inputEndpoint = endpoint
+        if let request = endpoint.request("/api/device/display", timeout: 5),
+           let (data, _) = try? await URLSession.shared.data(for: request),
+           let display = try? JSONDecoder().decode(DisplayReply.self, from: data) {
+            deviceSize = CGSize(width: display.width, height: display.height)
+            lastError = display.inputReady
+                ? nil
+                : "To click and type on the phone over Wi-Fi, turn on “DroidHouse Remote Input” in the phone's Settings → Accessibility."
+        }
+        isReady = true
+    }
+
     func detach() {
+        inputChain?.cancel()
+        inputChain = nil
+        inputEndpoint = nil
+
         if let shellInput {
             // `exit` lets the device-side shell close cleanly; terminating the
             // adb client alone can leave the remote shell lingering.
@@ -107,21 +148,24 @@ final class AeroCastController: ObservableObject {
     /// which keeps the view free of any knowledge of device resolution.
     func tap(atNormalised point: CGPoint) {
         let device = denormalise(point)
-        send("input tap \(Int(device.x)) \(Int(device.y))")
+        dispatch("input tap \(Int(device.x)) \(Int(device.y))",
+                 ["type": "tap", "x": device.x, "y": device.y])
     }
 
     func longPress(atNormalised point: CGPoint, milliseconds: Int = 600) {
         let device = denormalise(point)
         // A long press is a zero-distance swipe with a duration — `input` has
         // no dedicated long-press verb.
-        send("input swipe \(Int(device.x)) \(Int(device.y)) \(Int(device.x)) \(Int(device.y)) \(milliseconds)")
+        dispatch("input swipe \(Int(device.x)) \(Int(device.y)) \(Int(device.x)) \(Int(device.y)) \(milliseconds)",
+                 ["type": "longpress", "x": device.x, "y": device.y, "durationMs": milliseconds])
     }
 
     func swipe(fromNormalised start: CGPoint, toNormalised end: CGPoint, milliseconds: Int) {
         let a = denormalise(start)
         let b = denormalise(end)
         let duration = max(30, min(3000, milliseconds))
-        send("input swipe \(Int(a.x)) \(Int(a.y)) \(Int(b.x)) \(Int(b.y)) \(duration)")
+        dispatch("input swipe \(Int(a.x)) \(Int(a.y)) \(Int(b.x)) \(Int(b.y)) \(duration)",
+                 ["type": "swipe", "x": a.x, "y": a.y, "x2": b.x, "y2": b.y, "durationMs": duration])
     }
 
     /// Scroll wheel → a short flick, since `input` has no scroll primitive.
@@ -136,7 +180,8 @@ final class AeroCastController: ObservableObject {
             x: origin.x,
             y: min(deviceSize.height - 10, max(10, origin.y + travel))
         )
-        send("input swipe \(Int(origin.x)) \(Int(origin.y)) \(Int(target.x)) \(Int(target.y)) 120")
+        dispatch("input swipe \(Int(origin.x)) \(Int(origin.y)) \(Int(target.x)) \(Int(target.y)) 120",
+                 ["type": "swipe", "x": origin.x, "y": origin.y, "x2": target.x, "y2": target.y, "durationMs": 120])
     }
 
     private func denormalise(_ point: CGPoint) -> CGPoint {
@@ -185,7 +230,13 @@ final class AeroCastController: ObservableObject {
     }
 
     func press(_ key: NavigationKey) {
-        send("input keyevent \(key.rawValue)")
+        sendKey(key.rawValue)
+    }
+
+    /// A named key (`KEYCODE_BACK`, `KEYCODE_DPAD_LEFT`…) over either transport.
+    private func sendKey(_ keycode: String) {
+        let name = keycode.replacingOccurrences(of: "KEYCODE_", with: "")
+        dispatch("input keyevent \(keycode)", ["type": "key", "key": name])
     }
 
     func keyCode(_ code: Int) {
@@ -200,6 +251,16 @@ final class AeroCastController: ObservableObject {
     func type(_ text: String) {
         guard !text.isEmpty else { return }
 
+        if inputEndpoint != nil {
+            // The companion inserts whole runs of text at the cursor; only
+            // newlines need to become an Enter key.
+            for (index, line) in text.components(separatedBy: "\n").enumerated() {
+                if index > 0 { sendKey("KEYCODE_ENTER") }
+                if !line.isEmpty { post(["type": "text", "text": line]) }
+            }
+            return
+        }
+
         for character in text {
             if character == "\n" {
                 send("input keyevent KEYCODE_ENTER")
@@ -213,7 +274,7 @@ final class AeroCastController: ObservableObject {
     }
 
     func backspace() {
-        send("input keyevent KEYCODE_DEL")
+        dispatch("input keyevent KEYCODE_DEL", ["type": "backspace"])
     }
 
     /// Maps a macOS key event to the device, returning false when there is no
@@ -227,10 +288,10 @@ final class AeroCastController: ObservableObject {
         case 51:  backspace(); return true                    // delete
         case 36, 76: press(.back); return false               // return handled as text below
         case 53:  press(.back); return true                   // escape → back
-        case 123: send("input keyevent KEYCODE_DPAD_LEFT"); return true
-        case 124: send("input keyevent KEYCODE_DPAD_RIGHT"); return true
-        case 125: send("input keyevent KEYCODE_DPAD_DOWN"); return true
-        case 126: send("input keyevent KEYCODE_DPAD_UP"); return true
+        case 123: sendKey("KEYCODE_DPAD_LEFT"); return true
+        case 124: sendKey("KEYCODE_DPAD_RIGHT"); return true
+        case 125: sendKey("KEYCODE_DPAD_DOWN"); return true
+        case 126: sendKey("KEYCODE_DPAD_UP"); return true
         default: break
         }
 
@@ -242,6 +303,42 @@ final class AeroCastController: ObservableObject {
     }
 
     // MARK: - Transport
+
+    /// Sends a shell `input` command over adb, or the equivalent event to the
+    /// companion over Wi-Fi.
+    private func dispatch(_ shellCommand: String, _ event: [String: Any]) {
+        if inputEndpoint != nil {
+            post(event)
+        } else {
+            send(shellCommand)
+        }
+    }
+
+    private func post(_ event: [String: Any]) {
+        guard isReady, let endpoint = inputEndpoint,
+              var request = endpoint.request("/api/input", method: "POST", timeout: 5),
+              let body = try? JSONSerialization.data(withJSONObject: event) else { return }
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        let previous = inputChain
+        inputChain = Task { [weak self] in
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                // 409: the Accessibility service is off. Say how to fix it once,
+                // rather than failing silently on every click.
+                if status == 409 {
+                    let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+                    self?.lastError = message
+                }
+            } catch {
+                self?.lastError = "Couldn't reach the phone: \(error.localizedDescription)"
+            }
+        }
+    }
 
     private func send(_ command: String) {
         guard isReady, let handle = shellInput else { return }
