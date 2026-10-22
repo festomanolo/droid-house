@@ -10,6 +10,7 @@ import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.call
 import io.ktor.server.application.install
@@ -19,6 +20,7 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.request.path
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
@@ -29,11 +31,13 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 /**
- * The local bridge. Binds Ktor's CIO engine to 127.0.0.1:8080 and is reached
- * from the Mac through `adb forward tcp:8080 tcp:8080`.
+ * The bridge. Ktor's CIO engine on port 8080, reached from the Mac either
+ * through `adb forward tcp:8080 tcp:8080` or directly over Wi-Fi.
  *
- * Binding to loopback only is deliberate: the socket is meant to be reachable
- * through the adb tunnel and by nothing else on the Wi-Fi network.
+ * With Wi-Fi mode off it binds loopback only, so nothing but the adb tunnel
+ * can reach it. With it on it binds every interface, and any caller that isn't
+ * loopback must present a token from pairing (see [LanAccess]) — only
+ * `/api/hello` and `/api/pair` answer without one.
  */
 class BridgeServer(
     private val appContext: Context,
@@ -44,7 +48,9 @@ class BridgeServer(
 
     companion object {
         private const val TAG = "BridgeServer"
-        const val PROTOCOL_VERSION = 1
+        /** 2 adds Wi-Fi pairing, the file API and remote input. */
+        const val PROTOCOL_VERSION = 2
+        const val VERSION = "2.2"
     }
 
     private val smsRepository = SmsRepository(appContext)
@@ -57,7 +63,8 @@ class BridgeServer(
     fun start() {
         if (isRunning) return
 
-        val server = embeddedServer(CIO, port = port, host = "127.0.0.1") {
+        val host = LanAccess.bindHost()
+        val server = embeddedServer(CIO, port = port, host = host) {
             install(ContentNegotiation) {
                 json(
                     Json {
@@ -83,7 +90,58 @@ class BridgeServer(
                 }
             }
 
+            // Loopback is the adb tunnel, which adb already authenticated.
+            // Everything else needs a paired token.
+            intercept(ApplicationCallPipeline.Plugins) {
+                val path = call.request.path()
+                if (path == "/api/hello" || path == "/api/pair") return@intercept
+                if (LanAccess.isLoopback(call.request.local.remoteAddress)) return@intercept
+
+                val token = LanAccess.bearerToken(call.request.headers["Authorization"])
+                if (!LanAccess.isAuthorized(token)) {
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        SimpleResult(false, "This Mac isn't paired. Pair it with the code shown in the DroidHouse app.")
+                    )
+                    finish()
+                }
+            }
+
             routing {
+
+                // ------------------------------------------------------ pairing
+
+                get("/api/hello") {
+                    call.respond(
+                        HelloPayload(
+                            app = "DroidHouse Companion",
+                            version = VERSION,
+                            protocolVersion = PROTOCOL_VERSION,
+                            deviceId = LanAccess.deviceId,
+                            deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
+                            androidRelease = Build.VERSION.RELEASE ?: "",
+                            pairingRequired = !LanAccess.isLoopback(call.request.local.remoteAddress)
+                        )
+                    )
+                }
+
+                post("/api/pair") {
+                    val request = runCatching { call.receive<PairRequest>() }.getOrNull()
+                    val token = request?.let { LanAccess.pair(it.code, it.clientName) }
+                    if (token == null) {
+                        call.respond(
+                            HttpStatusCode.Forbidden,
+                            SimpleResult(false, "That code doesn't match the one on the phone.")
+                        )
+                        return@post
+                    }
+                    call.respond(PairResponse(token, LanAccess.deviceId, "${Build.MANUFACTURER} ${Build.MODEL}"))
+                }
+
+                // ------------------------------------------- files & remote input
+
+                FileBridge.install(this, appContext)
+                RemoteInputService.install(this, appContext)
 
                 // ------------------------------------------------------ status
 
@@ -389,7 +447,7 @@ class BridgeServer(
         server.start(wait = false)
         engine = server
         isRunning = true
-        Log.i(TAG, "Bridge listening on 127.0.0.1:$port")
+        Log.i(TAG, "Bridge listening on $host:$port")
     }
 
     fun stop() {
@@ -405,7 +463,7 @@ class BridgeServer(
     private fun buildStatus() = StatusPayload(
         status = "online",
         app = "DroidHouse Companion",
-        version = "2.1",
+        version = VERSION,
         protocolVersion = PROTOCOL_VERSION,
         notificationAccess = hasNotificationAccess(),
         smsAccess = smsRepository.hasSmsAccess(),
