@@ -42,6 +42,15 @@ fi
 
 APP_PATH="$BUILD_DIR/Build/Products/Release/$APP_NAME.app"
 
+# 2b. Ad-hoc sign the bundle. macOS refuses notification permission (and so
+# reply-from-notification) to an app bundle with no signature at all.
+echo "🔏 Ad-hoc signing $APP_NAME.app..."
+codesign --force --deep --sign - "$APP_PATH"
+if [ $? -ne 0 ]; then
+    echo "❌ Signing failed!"
+    exit 1
+fi
+
 # 3. Create DMG
 echo "📦 Packaging into $DMG_NAME..."
 hdiutil create -volname "$APP_NAME" -srcfolder "$APP_PATH" -ov -format UDZO "$DMG_NAME"

@@ -115,6 +115,20 @@ final class CompanionSync: ObservableObject {
         let sizeBytes: Int64
     }
 
+    /// A live entry from the phone's notification shade.
+    struct PhoneNotification: Decodable, Equatable {
+        let id: String
+        let packageName: String
+        let appLabel: String
+        let title: String
+        let text: String
+        let timestamp: Int64
+        let isMessaging: Bool
+        /// Absent on companions older than 2.1, which can't reply.
+        let canReply: Bool?
+        let lastFromSelf: Bool?
+    }
+
     struct RosterResponse: Decodable {
         let name: String
         let columns: [String]
@@ -241,6 +255,7 @@ final class CompanionSync: ObservableObject {
                 guard self.isConnected else { continue }
 
                 try? await self.fetchConversations()
+                await PhoneNotificationRelay.shared.sync()
                 if let threadID = self.activeThreadID {
                     try? await self.fetchMessages(for: threadID)
                 }
@@ -465,6 +480,44 @@ final class CompanionSync: ObservableObject {
             let reason = error.localizedDescription
             deliveryStates[messageID] = .failed(reason)
             lastSyncError = reason
+        }
+    }
+
+    // MARK: - Notifications
+
+    func fetchNotifications() async throws -> [PhoneNotification] {
+        guard isConnected, let url = URL(string: "\(baseURL)/api/notifications") else { return [] }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 6
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return try decoder.decode([PhoneNotification].self, from: data)
+    }
+
+    /// Answers a phone notification through the posting app's own inline
+    /// reply, so WhatsApp, Instagram, Messages etc. send it from their account.
+    /// Returns nil on success, otherwise a reason fit to show the user.
+    func replyToNotification(id: String, text: String) async -> String? {
+        guard isConnected, let url = URL(string: "\(baseURL)/api/notifications/reply") else {
+            return "Your phone isn't connected."
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["id": id, "text": text])
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return "No response from the phone." }
+            if (200...299).contains(http.statusCode) { return nil }
+            if http.statusCode == 404 { return "Update the DroidHouse companion on your phone to reply from the Mac." }
+            let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+            return detail ?? "The phone rejected the reply (HTTP \(http.statusCode))."
+        } catch {
+            return error.localizedDescription
         }
     }
 

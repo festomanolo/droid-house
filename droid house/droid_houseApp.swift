@@ -21,6 +21,10 @@ struct droid_houseApp: App {
         guard DeveloperConfig.validateLicense() else {
             fatalError("CRITICAL: Proprietary DroidHouse Developer Key Missing or Invalid. Unauthorized clone detected. Contact festomanolofm@gmail.com.")
         }
+
+        // Before launch completes, so a reply typed into a banner while the
+        // app was quit still reaches the delegate.
+        PhoneNotificationRelay.shared.activate()
     }
 
     var body: some Scene {

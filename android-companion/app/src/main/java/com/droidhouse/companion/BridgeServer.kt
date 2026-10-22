@@ -199,6 +199,32 @@ class BridgeServer(
                     call.respond(NotificationService.snapshot(appContext))
                 }
 
+                post("/api/notifications/reply") {
+                    val request = call.receive<NotificationReplyRequest>()
+                    if (request.id.isBlank() || request.text.isBlank()) {
+                        call.respond(
+                            HttpStatusCode.BadRequest,
+                            SimpleResult(false, "id and text are both required")
+                        )
+                        return@post
+                    }
+
+                    when (val result = NotificationService.reply(appContext, request.id, request.text)) {
+                        NotificationReplyResult.Sent ->
+                            call.respond(SimpleResult(true, "Reply sent"))
+                        NotificationReplyResult.Gone ->
+                            call.respond(
+                                HttpStatusCode.Gone,
+                                SimpleResult(false, "That notification is no longer on the phone")
+                            )
+                        is NotificationReplyResult.Failed ->
+                            call.respond(
+                                HttpStatusCode.InternalServerError,
+                                SimpleResult(false, result.reason)
+                            )
+                    }
+                }
+
                 // ------------------------------------------------- screenshots
 
                 get("/api/screenshots") {
@@ -379,7 +405,7 @@ class BridgeServer(
     private fun buildStatus() = StatusPayload(
         status = "online",
         app = "DroidHouse Companion",
-        version = "2.0",
+        version = "2.1",
         protocolVersion = PROTOCOL_VERSION,
         notificationAccess = hasNotificationAccess(),
         smsAccess = smsRepository.hasSmsAccess(),

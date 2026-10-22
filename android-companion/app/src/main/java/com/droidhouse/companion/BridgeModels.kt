@@ -92,7 +92,17 @@ data class NotificationPayload(
     val title: String,
     val text: String,
     val timestamp: Long,
-    val isMessaging: Boolean
+    val isMessaging: Boolean,
+    /** True when the notification carries an inline-reply action the Mac can fire. */
+    val canReply: Boolean = false,
+    /** True when the newest message in the thread is the user's own. */
+    val lastFromSelf: Boolean = false
+)
+
+@Serializable
+data class NotificationReplyRequest(
+    val id: String,
+    val text: String
 )
 
 @Serializable
