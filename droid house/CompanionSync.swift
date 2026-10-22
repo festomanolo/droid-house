@@ -22,8 +22,9 @@ enum MessageDeliveryState: Equatable {
     }
 }
 
-/// The Mac's client for the companion's Ktor bridge on `127.0.0.1:8080`,
-/// reachable through `adb forward tcp:8080 tcp:8080`.
+/// The Mac's client for the companion's Ktor bridge — on `127.0.0.1:8080`
+/// through `adb forward tcp:8080 tcp:8080`, or at the phone's own address over
+/// Wi-Fi with a paired token (see `CompanionLink`).
 ///
 /// When the companion isn't reachable the object serves a small demo dataset so
 /// the UI is explorable without a phone attached — every surface that does this
@@ -58,8 +59,10 @@ final class CompanionSync: ObservableObject {
 
     // MARK: Private
 
-    private let baseURL = "http://127.0.0.1:8080"
+    private var baseURL: String { CompanionLink.baseURL }
     private var portForwardedSerial: String?
+    /// Set while the bridge is reached over Wi-Fi rather than adb.
+    private var wifiDeviceID: String?
     private var lastAdbPath: String = ADBLocator.resolve()
     private var pollTask: Task<Void, Never>?
     private var activeThreadID: String?
@@ -138,7 +141,31 @@ final class CompanionSync: ObservableObject {
 
     // MARK: - Connection
 
+    /// Points the bridge client at a device: adb forward for adb serials, the
+    /// phone's address and token for a Wi-Fi companion.
+    func attach(to device: ADBDevice, adbPath: String = ADBLocator.resolve()) async {
+        if device.isCompanionOnly {
+            await connectOverWiFi(deviceID: device.id)
+        } else {
+            await setupPortForwarding(serial: device.id, adbPath: adbPath)
+        }
+    }
+
+    private func connectOverWiFi(deviceID: String) async {
+        startPolling()
+        guard let endpoint = CompanionLink.wifiEndpoint(for: deviceID) else {
+            markDisconnected("Phone not paired")
+            return
+        }
+        wifiDeviceID = deviceID
+        portForwardedSerial = nil
+        CompanionLink.endpoint = endpoint
+        await checkStatus()
+    }
+
     func setupPortForwarding(serial: String, adbPath: String = ADBLocator.resolve()) async {
+        wifiDeviceID = nil
+        CompanionLink.endpoint = .loopback
         // Always make sure the poll loop is alive, even on a repeat call — it
         // is what keeps `isConnected` (and therefore clipboard, roster and
         // messaging) truthful after a transient drop.
@@ -166,6 +193,7 @@ final class CompanionSync: ObservableObject {
                 portForwardedSerial = serial
                 statusMessage = "Port 8080 forwarded"
                 await checkStatus()
+                await learnCompanionIdentity(serial: serial)
                 startPolling()
             } else {
                 statusMessage = "Port forward failed"
@@ -188,6 +216,13 @@ final class CompanionSync: ObservableObject {
         return output?.status == 0
     }
 
+    /// Asks the forwarded companion who it is, so the same phone isn't also
+    /// listed as a Wi-Fi device while it's attached over adb.
+    private func learnCompanionIdentity(serial: String) async {
+        guard let hello = await WiFiCompanionStore.hello(.loopback) else { return }
+        WiFiCompanionStore.shared.noteAdbAttached(serial: serial, companionID: hello.deviceId)
+    }
+
     func checkStatus() async {
         guard let url = URL(string: "\(baseURL)/api/status") else { return }
 
@@ -196,7 +231,7 @@ final class CompanionSync: ObservableObject {
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await CompanionLink.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 markDisconnected("Companion offline")
                 return
@@ -244,7 +279,14 @@ final class CompanionSync: ObservableObject {
 
                 await self.checkStatus()
 
-                if !self.isConnected, let serial = self.portForwardedSerial {
+                if !self.isConnected, let deviceID = self.wifiDeviceID {
+                    // The phone may have a new IP; the store re-resolves it.
+                    await WiFiCompanionStore.shared.refreshReachability()
+                    if let endpoint = CompanionLink.wifiEndpoint(for: deviceID) {
+                        CompanionLink.endpoint = endpoint
+                    }
+                    await self.checkStatus()
+                } else if !self.isConnected, let serial = self.portForwardedSerial {
                     // `adb forward` entries die with the adb server and on
                     // unplug/replug. Re-establishing here is what makes the
                     // bridge come back on its own instead of needing a restart.
@@ -281,7 +323,7 @@ final class CompanionSync: ObservableObject {
         request.timeoutInterval = 12
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await CompanionLink.data(for: request)
 
         if let http = response as? HTTPURLResponse, http.statusCode == 403 {
             lastSyncError = "The companion has not been granted READ_SMS."
@@ -322,7 +364,7 @@ final class CompanionSync: ObservableObject {
         request.timeoutInterval = 12
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await CompanionLink.data(for: request)
         let decoded = try decoder.decode([SMSMessage].self, from: data)
 
         let merged = mergePendingSends(into: decoded, threadID: threadID)
@@ -457,7 +499,7 @@ final class CompanionSync: ObservableObject {
         request.httpBody = payload
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await CompanionLink.data(for: request)
 
             if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                 let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
@@ -491,7 +533,7 @@ final class CompanionSync: ObservableObject {
         request.timeoutInterval = 6
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await CompanionLink.data(for: request)
         return try decoder.decode([PhoneNotification].self, from: data)
     }
 
@@ -510,7 +552,7 @@ final class CompanionSync: ObservableObject {
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["id": id, "text": text])
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await CompanionLink.data(for: request)
             guard let http = response as? HTTPURLResponse else { return "No response from the phone." }
             if (200...299).contains(http.statusCode) { return nil }
             if http.statusCode == 404 { return "Update the DroidHouse companion on your phone to reply from the Mac." }
@@ -540,7 +582,7 @@ final class CompanionSync: ObservableObject {
         request.timeoutInterval = 6
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
+        guard let (data, _) = try? await CompanionLink.data(for: request),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
@@ -557,7 +599,7 @@ final class CompanionSync: ObservableObject {
         var request = URLRequest(url: url)
         request.timeoutInterval = 6
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await CompanionLink.data(for: request)
         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
            let text = json["text"] as? String {
             return text
@@ -572,7 +614,7 @@ final class CompanionSync: ObservableObject {
         request.timeoutInterval = 6
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text])
-        _ = try await URLSession.shared.data(for: request)
+        _ = try await CompanionLink.data(for: request)
     }
 
     // MARK: - Screenshots
@@ -583,7 +625,7 @@ final class CompanionSync: ObservableObject {
         request.timeoutInterval = 10
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await CompanionLink.data(for: request)
         let decoded = try decoder.decode([ScreenshotResponse].self, from: data)
 
         let items = decoded.map { item in
@@ -613,7 +655,7 @@ final class CompanionSync: ObservableObject {
         request.timeoutInterval = 30
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
+        guard let (data, response) = try? await CompanionLink.data(for: request),
               let http = response as? HTTPURLResponse,
               http.statusCode == 200,
               !data.isEmpty else { return nil }
@@ -633,7 +675,7 @@ final class CompanionSync: ObservableObject {
         request.timeoutInterval = 45
         request.cachePolicy = .reloadIgnoringLocalCacheData
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await CompanionLink.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
         return try decoder.decode(RosterResponse.self, from: data)
     }
@@ -644,7 +686,7 @@ final class CompanionSync: ObservableObject {
         guard isConnected, let url = URL(string: "\(baseURL)/api/aerocast/status") else { return false }
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
+        guard let (data, _) = try? await CompanionLink.data(for: request),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return false
         }
