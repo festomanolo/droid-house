@@ -11,6 +11,10 @@
 
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- Wi-Fi mode without adb: Bonjour/NSD advertising so the Mac finds the phone -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <!-- Messaging bridge -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
@@ -32,6 +36,11 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
+    <!-- File explorer over Wi-Fi (what adb shell/pull/push do over USB) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -39,9 +48,10 @@
         android:label="DroidHouse Companion"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
         android:theme="@style/Theme.DroidHouse">
 
-        <!-- Always-on bridge: Ktor on 127.0.0.1:8080 -->
+        <!-- Always-on bridge: Ktor on :8080 (loopback for adb, LAN for Wi-Fi pairing) -->
         <service
             android:name=".DroidHouseCompanion"
             android:enabled="true"
@@ -61,6 +71,20 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|camera|microphone" />
+
+        <!-- Remote control from the Mac without adb's `input` command -->
+        <service
+            android:name=".RemoteInputService"
+            android:label="@string/remote_input_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/remote_input_service" />
+        </service>
 
         <!-- Notification mirror -->
         <service
