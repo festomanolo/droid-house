@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DroidHouse Companion</string>
+    <string name="remote_input_service_label">DroidHouse Remote Input</string>
+    <string name="remote_input_description">Lets your paired Mac tap, swipe and type on this phone from the AeroCast window when it is connected over Wi-Fi instead of adb. DroidHouse only acts on commands from a Mac you paired with the code shown in the app.</string>
 </resources>
