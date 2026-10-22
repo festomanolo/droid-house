@@ -220,3 +220,24 @@ data class StudioZoomRequest(
 data class StudioTorchRequest(
     val enabled: Boolean
 )
+
+// ----------------------------------------------------------- Wi-Fi pairing
+
+/** Unauthenticated identity, so the Mac can label a phone before pairing. */
+@Serializable
+data class HelloPayload(
+    val app: String,
+    val version: String,
+    val protocolVersion: Int,
+    val deviceId: String,
+    val deviceModel: String,
+    val androidRelease: String,
+    /** True when this caller must pair (it is not on loopback/adb). */
+    val pairingRequired: Boolean
+)
+
+@Serializable
+data class PairRequest(val code: String, val clientName: String = "Mac")
+
+@Serializable
+data class PairResponse(val token: String, val deviceId: String, val deviceModel: String)
