@@ -173,6 +173,13 @@ final class RosterStore: ObservableObject {
             return
         }
 
+        // A Wi-Fi phone has no adb to fall back on.
+        if device.isCompanionOnly {
+            lastError = "The companion couldn't read \(uri). Open DroidHouse on the phone and grant Contacts, Call log and SMS access."
+            table = .empty
+            return
+        }
+
         // Fallback: straight adb.
         transport = "adb shell"
         do {
@@ -213,13 +220,19 @@ final class RosterStore: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let output = try await runADB(
-                // Single-quoted so spaces and shell metacharacters in the path
-                // survive the device-side shell intact.
-                ["-s", device.id, "exec-out",
-                 "cat '" + remotePath.replacingOccurrences(of: "'", with: "'\\''") + "'"],
-                timeout: 120
-            )
+            let output: String
+            if let endpoint = CompanionLink.wifiEndpoint(for: device.id) {
+                let data = try await CompanionFiles(endpoint: endpoint).data(remotePath)
+                output = String(decoding: data, as: UTF8.self)
+            } else {
+                output = try await runADB(
+                    // Single-quoted so spaces and shell metacharacters in the path
+                    // survive the device-side shell intact.
+                    ["-s", device.id, "exec-out",
+                     "cat '" + remotePath.replacingOccurrences(of: "'", with: "'\\''") + "'"],
+                    timeout: 120
+                )
+            }
             let name = (remotePath as NSString).lastPathComponent
             let parsed = Self.parseDelimited(output, name: name)
             table = RosterTable(
