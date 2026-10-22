@@ -338,12 +338,12 @@ struct DeviceCard: View {
                             .font(.system(size: 13, weight: .semibold))
                             .lineLimit(1)
                         HStack(spacing: 4) {
-                            Image(systemName: device.connectionType == .wireless ? "wifi" : "cable.connector")
+                            Image(systemName: device.connectionType == .usb ? "cable.connector" : "wifi")
                                 .font(.system(size: 9))
-                            Text(device.connectionType.rawValue)
+                            Text(device.isCompanionOnly ? "Wi-Fi · no adb" : device.connectionType.rawValue)
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundStyle(device.connectionType == .wireless ? Color.green : Color.secondary)
+                        .foregroundStyle(device.connectionType == .usb ? Color.secondary : Color.green)
                     }
 
                     Spacer()
