@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict/>
+<dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>DroidHouse finds and connects to your Android phone over Wi-Fi, so it works without adb or a USB cable.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_droidhouse._tcp</string>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
 </plist>

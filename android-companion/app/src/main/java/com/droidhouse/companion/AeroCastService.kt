@@ -29,11 +29,11 @@ import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
 import android.view.Surface
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.serialization.json.Json
 import java.io.BufferedOutputStream
-import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
@@ -295,7 +295,9 @@ class AeroCastService : Service() {
                 @Suppress("DEPRECATION")
                 val resultData: Intent? = intent.getParcelableExtra(EXTRA_RESULT_DATA)
 
-                wantsAudio = intent.getBooleanExtra(EXTRA_AUDIO, true)
+                // Playback capture arrived in Android 10; older phones cast video only.
+                wantsAudio = intent.getBooleanExtra(EXTRA_AUDIO, true) &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                 bitRate = intent.getIntExtra(EXTRA_BIT_RATE, DEFAULT_BIT_RATE)
                 val maxWidth = intent.getIntExtra(EXTRA_MAX_WIDTH, DEFAULT_MAX_WIDTH)
 
@@ -430,13 +432,13 @@ class AeroCastService : Service() {
 
     private fun acceptLoop() {
         try {
-            // Loopback only: this socket is meant to be reached through the adb
-            // tunnel, never from the local network.
-            val server = ServerSocket(PORT, 1, InetAddress.getByName("127.0.0.1"))
+            // Loopback for the adb tunnel; every interface in Wi-Fi mode, where
+            // LAN clients must authenticate before they get a single frame.
+            val server = ServerSocket(PORT, 4, LanAccess.bindAddress())
             server.reuseAddress = true
             serverSocket = server
 
-            val socket = server.accept()
+            val socket = LanAccess.acceptAuthorized(server) { running.get() }
             socket.tcpNoDelay = true
             clientSocket = socket
 
@@ -464,7 +466,7 @@ class AeroCastService : Service() {
             statusMessage = "Streaming to the Mac"
 
             startVideoPipeline()
-            if (wantsAudio) startAudioPipeline()
+            if (wantsAudio && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startAudioPipeline()
             startHeartbeat()
 
         } catch (error: Exception) {
@@ -592,6 +594,7 @@ class AeroCastService : Service() {
 
     // ---------------------------------------------------------------- audio
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun startAudioPipeline() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED

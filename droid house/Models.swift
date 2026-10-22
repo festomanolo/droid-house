@@ -115,7 +115,13 @@ struct ADBDevice: Identifiable, Hashable {
     enum ConnectionType: String {
         case usb = "USB"
         case wireless = "Wireless"
+        /// Paired DroidHouse companion over the local network — no adb at all.
+        case companion = "Wi-Fi"
     }
+
+    /// True for devices reached only through the companion, where every adb
+    /// command path has to be swapped for the bridge's HTTP API.
+    var isCompanionOnly: Bool { connectionType == .companion }
     
     var displayName: String {
         name.isEmpty ? model : name
@@ -123,7 +129,10 @@ struct ADBDevice: Identifiable, Hashable {
 }
 
 struct RemoteFile: Identifiable, Hashable {
-    let id = UUID()
+    /// The device path is the identity. A fresh UUID per listing made SwiftUI
+    /// rebuild every cell on each refresh, dropped the selection whenever the
+    /// folder reloaded, and defeated the thumbnail cache.
+    var id: String { fullPath }
     let name: String
     let isDirectory: Bool
     let size: Int64

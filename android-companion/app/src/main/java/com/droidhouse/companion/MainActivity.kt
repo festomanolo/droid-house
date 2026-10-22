@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -84,6 +85,7 @@ class MainActivity : ComponentActivity() {
             "CRITICAL: Proprietary DroidHouse Developer Key Missing. Unauthorized clone. Contact festomanolofm@gmail.com."
         }
         enableEdgeToEdge()
+        LanAccess.init(applicationContext)
 
         startCompanionService()
         requestRuntimePermissions()
@@ -111,7 +113,13 @@ class MainActivity : ComponentActivity() {
                             onCaptureClipboard = {
                                 ClipboardBridge.captureFromSystem(applicationContext, "app-button")
                             },
-                            onOpenRemote = { currentScreen = "remote" }
+                            onOpenRemote = { currentScreen = "remote" },
+                            onSetWifiEnabled = { enabled ->
+                                LanAccess.isEnabled = enabled
+                                restartBridge()
+                            },
+                            onGrantFiles = { requestFileAccess() },
+                            onOpenAccessibility = { RemoteInputService.openSettings(this) }
                         )
                     }
                 }
@@ -132,6 +140,30 @@ class MainActivity : ComponentActivity() {
             this,
             Intent(this, DroidHouseCompanion::class.java)
         )
+    }
+
+    private fun restartBridge() {
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, DroidHouseCompanion::class.java)
+                .setAction(DroidHouseCompanion.ACTION_RESTART_BRIDGE)
+        )
+    }
+
+    /** Browsing the phone over Wi-Fi needs the storage access adb's shell user has. */
+    private fun requestFileAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val perApp = Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            runCatching { startActivity(perApp) }
+                .onFailure { startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
+        } else {
+            permissionLauncher.launch(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            )
+        }
     }
 
     private fun requestRuntimePermissions() {
@@ -178,7 +210,13 @@ private data class CompanionUiState(
     val clipboardSource: String = "none",
     val aeroCastStreaming: Boolean = false,
     val aeroCastMessage: String = "Idle",
-    val aeroCastSize: String = ""
+    val aeroCastSize: String = "",
+    val wifiEnabled: Boolean = true,
+    val wifiAddress: String? = null,
+    val pairingCode: String = "",
+    val pairedMacs: List<String> = emptyList(),
+    val filesGranted: Boolean = false,
+    val remoteInputReady: Boolean = false
 ) {
     val allAccessGranted: Boolean
         get() = smsGranted && contactsGranted && audioGranted && notificationAccess
@@ -192,7 +230,10 @@ private fun CompanionScreen(
     onOpenNotificationSettings: () -> Unit,
     onRestartService: () -> Unit,
     onCaptureClipboard: () -> Boolean,
-    onOpenRemote: () -> Unit
+    onOpenRemote: () -> Unit,
+    onSetWifiEnabled: (Boolean) -> Unit,
+    onGrantFiles: () -> Unit,
+    onOpenAccessibility: () -> Unit
 ) {
     val context = LocalContext.current
     val auroraPhase = rememberAuroraPhase()
@@ -220,7 +261,13 @@ private fun CompanionScreen(
                 clipboardSource = ClipboardBridge.captureSource,
                 aeroCastStreaming = aeroCast.streaming,
                 aeroCastMessage = aeroCast.message,
-                aeroCastSize = if (aeroCast.width > 0) "${aeroCast.width}×${aeroCast.height}" else ""
+                aeroCastSize = if (aeroCast.width > 0) "${aeroCast.width}×${aeroCast.height}" else "",
+                wifiEnabled = LanAccess.isEnabled,
+                wifiAddress = LanAccess.localAddress(),
+                pairingCode = LanAccess.pairingCode,
+                pairedMacs = LanAccess.pairedMacs(),
+                filesGranted = FileBridge.hasStorageAccess(context),
+                remoteInputReady = RemoteInputService.isReady
             )
             delay(1000)
         }
@@ -253,6 +300,7 @@ private fun CompanionScreen(
             )
             StatsStrip(state)
             MacRemoteCard(onOpenRemote = onOpenRemote)
+            WifiCard(state, onSetWifiEnabled, onGrantFiles, onOpenAccessibility)
             BridgeCard(state, onRestartService)
             ClipboardCard(state, onCaptureClipboard)
             AeroCastCard(state)
@@ -429,6 +477,101 @@ private fun VerticalHairline() {
 
 // MARK: - Cards
 
+/**
+ * Everything needed to use the phone from the Mac with no adb at all: the
+ * address the Mac connects to, the code it pairs with, and the two grants that
+ * stand in for adb's shell user (storage and input).
+ */
+@Composable
+private fun WifiCard(
+    state: CompanionUiState,
+    onSetWifiEnabled: (Boolean) -> Unit,
+    onGrantFiles: () -> Unit,
+    onOpenAccessibility: () -> Unit
+) {
+    GlassPanel(appearDelayMillis = 60) {
+        SectionLabel("Wi-Fi Connection · no adb needed")
+        HairlineDivider()
+        StatusRow("Wi-Fi mode", if (state.wifiEnabled) "On" else "Off (adb only)", state.wifiEnabled)
+
+        AnimatedVisibility(
+            visible = state.wifiEnabled,
+            enter = fadeIn() + expandVertically(animationSpec = CompanionMotion.elastic()),
+            exit = fadeOut() + shrinkVertically(animationSpec = CompanionMotion.crisp())
+        ) {
+            Column {
+                HairlineDivider()
+                StatusRow("Phone address", state.wifiAddress ?: "Not on Wi-Fi", state.wifiAddress != null)
+                HairlineDivider()
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "Pairing code",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = state.pairingCode.chunked(3).joinToString(" "),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "On the Mac: Connect → pick this phone → enter the code. Use once; a new one appears after each pairing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                HairlineDivider()
+                StatusRow(
+                    "Paired Macs",
+                    if (state.pairedMacs.isEmpty()) "None" else state.pairedMacs.joinToString(),
+                    state.pairedMacs.isNotEmpty()
+                )
+                HairlineDivider()
+                StatusRow("File access", if (state.filesGranted) "Granted" else "Missing", state.filesGranted)
+                HairlineDivider()
+                StatusRow(
+                    "Remote input",
+                    if (state.remoteInputReady) "Enabled" else "Off",
+                    state.remoteInputReady
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SpatialButton(
+                        text = "Files",
+                        enabled = !state.filesGranted,
+                        modifier = Modifier.weight(1f),
+                        onClick = onGrantFiles
+                    )
+                    SpatialButton(
+                        text = "Remote Input",
+                        prominent = false,
+                        enabled = !state.remoteInputReady,
+                        modifier = Modifier.weight(1f),
+                        onClick = onOpenAccessibility
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                SpatialButton(
+                    text = "Forget Paired Macs",
+                    prominent = false,
+                    enabled = state.pairedMacs.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { LanAccess.forgetAll() }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        SpatialButton(
+            text = if (state.wifiEnabled) "Turn Off Wi-Fi Mode" else "Turn On Wi-Fi Mode",
+            prominent = !state.wifiEnabled,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { onSetWifiEnabled(!state.wifiEnabled) }
+        )
+    }
+}
+
 @Composable
 private fun BridgeCard(state: CompanionUiState, onRestartService: () -> Unit) {
     GlassPanel(appearDelayMillis = 70) {
@@ -436,7 +579,7 @@ private fun BridgeCard(state: CompanionUiState, onRestartService: () -> Unit) {
         HairlineDivider()
         StatusRow("Ktor server", if (state.bridgeLive) "Listening" else "Stopped", state.bridgeLive)
         HairlineDivider()
-        StatusRow("Endpoint", "127.0.0.1:8080", true)
+        StatusRow("Endpoint", if (state.wifiEnabled) "0.0.0.0:8080" else "127.0.0.1:8080", true)
         HairlineDivider()
         StatusRow("adb forward", "tcp:8080 → tcp:8080", true)
 

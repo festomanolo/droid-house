@@ -1,5 +1,6 @@
 package com.droidhouse.companion
 
+import android.os.Build
 import android.os.Environment
 import android.os.FileObserver
 import android.util.Log
@@ -69,9 +70,19 @@ class ScreenshotWatcher {
         val mask = FileObserver.CREATE or FileObserver.CLOSE_WRITE or FileObserver.MOVED_TO
 
         for (directory in watchedDirectories) {
-            val observer = object : FileObserver(directory, mask) {
-                override fun onEvent(event: Int, path: String?) {
-                    handleEvent(directory, path)
+            val observer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                object : FileObserver(directory, mask) {
+                    override fun onEvent(event: Int, path: String?) {
+                        handleEvent(directory, path)
+                    }
+                }
+            } else {
+                // The File constructor is Android 10+; the path one does the same.
+                @Suppress("DEPRECATION")
+                object : FileObserver(directory.path, mask) {
+                    override fun onEvent(event: Int, path: String?) {
+                        handleEvent(directory, path)
+                    }
                 }
             }
             runCatching { observer.startWatching() }

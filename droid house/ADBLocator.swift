@@ -83,12 +83,20 @@ enum ADBLocator {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+
+        // This runs synchronously on first use, from view initialisers on the
+        // main thread. A slow or prompting shell profile used to hang launch
+        // indefinitely; give it a few seconds and fall back to plain "adb".
+        let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
 
         do {
             try process.run()
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 4, execute: watchdog)
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
+            watchdog.cancel()
             let path = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             // command -v can print a shell keyword/alias; only accept a real path.

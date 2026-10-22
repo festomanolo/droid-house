@@ -4,6 +4,7 @@ struct SettingsView: View {
     @AppStorage("appThemeColor") private var appThemeColor: String = "blue"
     @AppStorage("folderIconColor") private var folderIconColor: String = "blue"
     @AppStorage(ADBLocator.overrideKey) private var adbOverride: String = ""
+    @AppStorage(PhoneNotificationRelay.enabledKey) private var mirrorPhoneNotifications: Bool = true
     @State private var adbResolvedPath: String = "adb"
     @Environment(\.dismiss) private var dismiss
     
@@ -21,8 +22,8 @@ struct SettingsView: View {
         case available(String)
     }
 
-    private let currentVersion = "1.2.0"
-    private let releasesURL = URL(string: "https://github.com/festomanolo/droidhouse/releases")!
+    private let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.6"
+    private let releasesURL = URL(string: "https://github.com/festomanolo/droid-house/releases")!
     
     enum SettingsTab: String, CaseIterable, Identifiable {
         case appearance = "Appearance"
@@ -151,6 +152,18 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.inline)
+            }
+
+            Section {
+                Toggle("Show phone messages as Mac notifications", isOn: $mirrorPhoneNotifications)
+                    .onChange(of: mirrorPhoneNotifications) { _, enabled in
+                        if enabled { PhoneNotificationRelay.shared.requestAuthorization() }
+                    }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text("SMS, WhatsApp, Instagram, Telegram and other chats appear in macOS Notification Center. Hover a banner and choose Reply to answer from the Mac; the phone sends it through the original app.")
+                    .font(.caption2)
             }
 
             Section {
@@ -377,7 +390,7 @@ struct SettingsView: View {
     }
 
     private func fetchLatestVersion() async -> String? {
-        guard let url = URL(string: "https://api.github.com/repos/festomanolo/droidhouse/releases/latest") else {
+        guard let url = URL(string: "https://api.github.com/repos/festomanolo/droid-house/releases/latest") else {
             return nil
         }
         var request = URLRequest(url: url)

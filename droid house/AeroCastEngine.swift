@@ -100,6 +100,8 @@ final class AeroCastEngine: NSObject, ObservableObject {
 
     private var adbPath: String = ADBLocator.resolve()
     private var deviceSerial: String?
+    /// Where the companion's bridge and stream socket are for this session.
+    private var streamEndpoint: CompanionEndpoint = .loopback
 
     private var firstFrameWatchdog: Task<Void, Never>?
     private var statsTimer: Timer?
@@ -168,6 +170,12 @@ final class AeroCastEngine: NSObject, ObservableObject {
 
         beginStatsTimer()
 
+        // ADB Direct is screenrecord over adb; a Wi-Fi-only phone has no adb,
+        // so it always goes through the companion.
+        if CompanionLink.wifiEndpoint(for: serial) != nil, source == .screenRecord {
+            source = .companion
+        }
+
         switch source {
         case .companion:
             Task { await startCompanionStream(serial: serial) }
@@ -219,14 +227,21 @@ final class AeroCastEngine: NSObject, ObservableObject {
     // MARK: - Companion path
 
     private func startCompanionStream(serial: String) async {
-        state = .preparing("Forwarding port \(AeroCastProtocol.port)…")
+        // Over Wi-Fi the phone's own socket is reachable directly; over adb it
+        // sits behind a forward.
+        if let endpoint = CompanionLink.wifiEndpoint(for: serial) {
+            streamEndpoint = endpoint
+        } else {
+            streamEndpoint = .loopback
+            state = .preparing("Forwarding port \(AeroCastProtocol.port)…")
 
-        let forwarded = await runADB(
-            ["-s", serial, "forward", "tcp:\(AeroCastProtocol.port)", "tcp:\(AeroCastProtocol.port)"]
-        )
-        guard forwarded != nil else {
-            state = .failed("Could not forward port \(AeroCastProtocol.port) over adb.")
-            return
+            let forwarded = await runADB(
+                ["-s", serial, "forward", "tcp:\(AeroCastProtocol.port)", "tcp:\(AeroCastProtocol.port)"]
+            )
+            guard forwarded != nil else {
+                state = .failed("Could not forward port \(AeroCastProtocol.port) over adb.")
+                return
+            }
         }
 
         state = .preparing("Asking the companion to start casting…")
@@ -261,7 +276,9 @@ final class AeroCastEngine: NSObject, ObservableObject {
             guard !self.state.isLive else { return }
 
             let reason = streaming
-                ? "The phone says it is casting but no video arrived on port \(AeroCastProtocol.port). Check that `adb forward` is still up."
+                ? (self.streamEndpoint.isLAN
+                    ? "The phone says it is casting but no video arrived from \(self.streamEndpoint.host):\(AeroCastProtocol.port). Check that the Mac and phone are on the same network."
+                    : "The phone says it is casting but no video arrived on port \(AeroCastProtocol.port). Check that `adb forward` is still up.")
                 : "The phone never started casting. Approve the screen-capture prompt on the device, or switch to ADB Direct."
 
             // stop() resets state to .idle, so the reason is applied after it.
@@ -271,7 +288,7 @@ final class AeroCastEngine: NSObject, ObservableObject {
     }
 
     private func requestCompanionStart() async throws {
-        guard let url = URL(string: "http://127.0.0.1:8080/api/aerocast/start") else { return }
+        guard let url = URL(string: "\(streamEndpoint.baseURL)/api/aerocast/start") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 8
@@ -280,6 +297,7 @@ final class AeroCastEngine: NSObject, ObservableObject {
             "audio": isAudioEnabled,
             "video": true
         ])
+        streamEndpoint.authorize(&request)
         let (_, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw ADBError.commandFailed("Companion returned HTTP \(http.statusCode)")
@@ -287,18 +305,20 @@ final class AeroCastEngine: NSObject, ObservableObject {
     }
 
     private func requestCompanionStop(serial: String) async {
-        guard let url = URL(string: "http://127.0.0.1:8080/api/aerocast/stop") else { return }
+        guard let url = URL(string: "\(streamEndpoint.baseURL)/api/aerocast/stop") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 5
+        streamEndpoint.authorize(&request)
         _ = try? await URLSession.shared.data(for: request)
     }
 
     private func openSocket() {
         let endpoint = NWEndpoint.hostPort(
-            host: .init("127.0.0.1"),
+            host: .init(streamEndpoint.host),
             port: .init(rawValue: AeroCastProtocol.port)!
         )
+        let preamble = streamEndpoint.streamPreamble
 
         let params = NWParameters.tcp
         // Screen mirroring is latency-critical; coalescing small packets would
@@ -318,6 +338,11 @@ final class AeroCastEngine: NSObject, ObservableObject {
                 guard let self else { return }
                 switch newState {
                 case .ready:
+                    // Over Wi-Fi the phone drops any client that doesn't
+                    // authenticate first.
+                    if let preamble {
+                        conn.send(content: preamble, completion: .idempotent)
+                    }
                     self.receiveNext()
                 case .failed(let error):
                     self.state = .failed("AeroCast socket failed: \(error.localizedDescription)")
@@ -877,28 +902,8 @@ final class AeroCastEngine: NSObject, ObservableObject {
     // MARK: - ADB helper
 
     private func runADB(_ arguments: [String]) async -> String? {
-        let adb = adbPath
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = [adb] + arguments
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = Pipe()
-                do {
-                    try process.run()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    guard process.terminationStatus == 0 else {
-                        continuation.resume(returning: nil)
-                        return
-                    }
-                    continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-                } catch {
-                    continuation.resume(returning: nil)
-                }
-            }
-        }
+        guard let output = try? await ADBProcess.run(adb: adbPath, arguments: arguments),
+              output.status == 0 else { return nil }
+        return output.stdoutString
     }
 }

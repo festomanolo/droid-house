@@ -98,9 +98,17 @@ final class ArchiveTransferEngine: ObservableObject {
 
     private let adbPath: String
     private var worker: Process?
+    /// The transfer when the phone is reached over Wi-Fi instead of adb.
+    private var wifiTask: Task<Void, Never>?
     private var sampler: Task<Void, Never>?
     private var startDate: Date?
     private var lastSampleBytes: Int64 = 0
+
+    /// Bytes moved so far, written from pipe callbacks and read by the
+    /// sampler. Publishing per chunk queued one main-actor task and one
+    /// SwiftUI update for every 64 KB — hundreds of thousands for a large
+    /// backup, which is what made the window stutter during transfers.
+    private let counter = ByteCounter()
 
     // MARK: - Init
 
@@ -119,8 +127,24 @@ final class ArchiveTransferEngine: ObservableObject {
         phase = .preparing
         appendLog("Backing up \(relativePaths.count) location(s) from \(remoteRoot)", isError: false)
 
-        // Build:  cd <root> && tar -cf - "p1" "p2" …
-        let quoted = relativePaths.map { "\"\($0)\"" }.joined(separator: " ")
+        // Wi-Fi: the companion runs the same tar on the phone and streams it.
+        if let endpoint = CompanionLink.wifiEndpoint(for: serial) {
+            beginSampling()
+            runOverWiFi(removingOnFailure: destination) { counter in
+                try await CompanionFiles(endpoint: endpoint)
+                    .downloadTar(root: remoteRoot, paths: relativePaths, to: destination) { counter.set($0) }
+            } onSuccess: { [weak self] in
+                self?.lastArchiveURL = destination
+                let size = (try? FileManager.default.attributesOfItem(atPath: destination.path))?[.size] as? Int64 ?? 0
+                self?.appendLog("Archive written over Wi-Fi (\(ByteFormat.string(size))). Timestamps embedded losslessly.", isError: false)
+            }
+            return
+        }
+
+        // Build:  cd <root> && tar -cf - 'p1' 'p2' …
+        // Single quotes: inside double quotes the device shell still expands
+        // $, ` and \, so a folder named with any of them archived the wrong path.
+        let quoted = relativePaths.map(shellQuote).joined(separator: " ")
         let remoteCommand = "cd \(shellQuote(remoteRoot)) && tar -cf - \(quoted)"
         let arguments = ["-s", serial, "exec-out", remoteCommand]
 
@@ -137,6 +161,17 @@ final class ArchiveTransferEngine: ObservableObject {
         phase = .preparing
         appendLog("Restoring archive \(archive.lastPathComponent) into \(remoteRoot)", isError: false)
 
+        if let endpoint = CompanionLink.wifiEndpoint(for: serial) {
+            beginSampling()
+            runOverWiFi(removingOnFailure: nil) { counter in
+                try await CompanionFiles(endpoint: endpoint)
+                    .uploadTar(archive, into: remoteRoot) { counter.set($0) }
+            } onSuccess: { [weak self] in
+                self?.appendLog("Extraction finished — POSIX modification dates restored on device.", isError: false)
+            }
+            return
+        }
+
         // toybox `tar x` restores mtime by default (we deliberately avoid -m).
         let remoteCommand = "cd \(shellQuote(remoteRoot)) && tar -xf -"
         let arguments = ["-s", serial, "shell", remoteCommand]
@@ -151,6 +186,8 @@ final class ArchiveTransferEngine: ObservableObject {
         appendLog("Cancellation requested — terminating stream.", isError: false)
         worker?.terminate()
         worker = nil
+        wifiTask?.cancel()
+        wifiTask = nil
         finish(.cancelled)
     }
 
@@ -161,17 +198,6 @@ final class ArchiveTransferEngine: ObservableObject {
         phase = .idle
     }
 
-    /// Configures a process to run adb, falling back to `/usr/bin/env` for PATH
-    /// resolution when only the bare "adb" name is available.
-    private nonisolated static func configure(_ process: Process, adb: String, arguments: [String]) {
-        if adb.hasPrefix("/") {
-            process.executableURL = URL(fileURLWithPath: adb)
-            process.arguments = arguments
-        } else {
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [adb] + arguments
-        }
-    }
 
     // MARK: - Pull (device -> Mac)
 
@@ -186,7 +212,7 @@ final class ArchiveTransferEngine: ObservableObject {
         }
 
         let process = Process()
-        Self.configure(process, adb: adb, arguments: arguments)
+        ADBProcess.configure(process, adb: adb, arguments: arguments)
 
         let outPipe = Pipe()
         let errPipe = Pipe()
@@ -194,17 +220,26 @@ final class ArchiveTransferEngine: ObservableObject {
         process.standardError = errPipe
 
         worker = process
+        let counter = self.counter
+
+        // The archive is complete only once stdout has hit EOF *and* adb has
+        // exited. Finishing on exit alone closed the file while the last
+        // buffered chunks were still in the pipe, truncating the archive.
+        let done = DispatchGroup()
+        done.enter() // stdout EOF
+        done.enter() // process exit
 
         // Stream stdout (raw tar bytes) straight to disk, counting as we go.
-        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else {
                 handle.readabilityHandler = nil
+                try? sink.close()
+                done.leave()
                 return
             }
             try? sink.write(contentsOf: chunk)
-            let count = Int64(chunk.count)
-            Task { @MainActor [weak self] in self?.advance(by: count) }
+            counter.add(Int64(chunk.count))
         }
 
         // Remote/adb errors (permission denied, connection dropped …).
@@ -214,14 +249,20 @@ final class ArchiveTransferEngine: ObservableObject {
             Task { @MainActor [weak self] in self?.ingestError(text) }
         }
 
-        process.terminationHandler = { [weak self] proc in
-            outPipe.fileHandleForReading.readabilityHandler = nil
+        process.terminationHandler = { _ in done.leave() }
+
+        done.notify(queue: .main) { [weak self] in
             errPipe.fileHandleForReading.readabilityHandler = nil
-            try? sink.close()
-            let status = proc.terminationStatus
-            Task { @MainActor [weak self] in
-                self?.lastArchiveURL = destination
-                self?.completePull(status: status, destination: destination)
+            let status = process.terminationStatus
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if self.phase == .cancelled {
+                    // A cut-off tar looks valid until extraction fails halfway.
+                    try? FileManager.default.removeItem(at: destination)
+                    return
+                }
+                self.lastArchiveURL = destination
+                self.completePull(status: status, destination: destination)
             }
         }
 
@@ -230,6 +271,8 @@ final class ArchiveTransferEngine: ObservableObject {
             phase = .streaming
             appendLog("Streaming tar archive over exec-out…", isError: false)
         } catch {
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
             try? sink.close()
             finish(.failed("Failed to launch adb: \(error.localizedDescription)"))
         }
@@ -237,6 +280,7 @@ final class ArchiveTransferEngine: ObservableObject {
 
     private func completePull(status: Int32, destination: URL) {
         guard isRunning || phase == .streaming else { return } // ignore if already cancelled
+        sampleRate()
         if status == 0 {
             phase = .finalizing
             let attrSize = (try? FileManager.default.attributesOfItem(atPath: destination.path))?[.size] as? Int64
@@ -260,7 +304,7 @@ final class ArchiveTransferEngine: ObservableObject {
         }
 
         let process = Process()
-        Self.configure(process, adb: adb, arguments: arguments)
+        ADBProcess.configure(process, adb: adb, arguments: arguments)
 
         let inPipe = Pipe()
         let outPipe = Pipe()
@@ -270,10 +314,15 @@ final class ArchiveTransferEngine: ObservableObject {
         process.standardError = errPipe
 
         worker = process
+        let counter = self.counter
 
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            guard let text = String(data: data, encoding: .utf8) else { return }
             Task { @MainActor [weak self] in self?.appendLog(text.trimmingCharacters(in: .whitespacesAndNewlines), isError: false) }
         }
         errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
@@ -305,7 +354,7 @@ final class ArchiveTransferEngine: ObservableObject {
         // Feed the archive into adb's stdin off the main thread, chunk by chunk,
         // so we get a live byte counter and never buffer the whole file in memory.
         let writeHandle = inPipe.fileHandleForWriting
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async {
             let chunkSize = 256 * 1024
             while true {
                 let chunk = reader.readData(ofLength: chunkSize)
@@ -315,8 +364,7 @@ final class ArchiveTransferEngine: ObservableObject {
                 } catch {
                     break // pipe closed (process ended / cancelled)
                 }
-                let count = Int64(chunk.count)
-                Task { @MainActor [weak self] in self?.advance(by: count) }
+                counter.add(Int64(chunk.count))
             }
             try? writeHandle.close()
             try? reader.close()
@@ -325,6 +373,7 @@ final class ArchiveTransferEngine: ObservableObject {
 
     private func completePush(status: Int32) {
         guard isRunning || phase == .streaming else { return }
+        sampleRate()
         if status == 0 {
             phase = .finalizing
             appendLog("Extraction finished — POSIX modification dates restored on device.", isError: false)
@@ -334,33 +383,63 @@ final class ArchiveTransferEngine: ObservableObject {
         }
     }
 
-    // MARK: - Progress plumbing
+    // MARK: - Wi-Fi (companion) transfers
 
-    private func advance(by count: Int64) {
-        bytesTransferred += count
+    private func runOverWiFi(
+        removingOnFailure partial: URL?,
+        _ work: @escaping (ByteCounter) async throws -> Void,
+        onSuccess: @escaping () -> Void
+    ) {
+        phase = .streaming
+        appendLog("Streaming tar archive over Wi-Fi…", isError: false)
+        let counter = self.counter
+        wifiTask = Task { [weak self] in
+            do {
+                try await work(counter)
+                guard let self, self.phase != .cancelled else { return }
+                self.sampleRate()
+                self.phase = .finalizing
+                onSuccess()
+                self.finish(.completed)
+            } catch {
+                // A cut-off tar looks valid until extraction fails halfway.
+                if let partial { try? FileManager.default.removeItem(at: partial) }
+                guard let self, self.phase != .cancelled else { return }
+                self.finish(.failed(error.localizedDescription))
+            }
+        }
     }
+
+    // MARK: - Progress plumbing
 
     private func beginSampling() {
         startDate = Date()
         lastSampleBytes = 0
+        lastSampleDate = Date()
         sampler?.cancel()
         sampler = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let self else { return }
-                await MainActor.run { self.sampleRate() }
+                self.sampleRate()
             }
         }
     }
 
+    private var lastSampleDate = Date()
+
     private func sampleRate() {
         guard let start = startDate else { return }
-        elapsed = Date().timeIntervalSince(start)
-        let delta = bytesTransferred - lastSampleBytes
-        // 500ms window -> multiply by 2 for per-second rate, smoothed.
-        let instantaneous = Double(delta) * 2.0
+        let now = Date()
+        elapsed = now.timeIntervalSince(start)
+        let total = counter.value
+        if total != bytesTransferred { bytesTransferred = total }
+        let window = now.timeIntervalSince(lastSampleDate)
+        guard window > 0.05 else { return }
+        let instantaneous = Double(total - lastSampleBytes) / window
         bytesPerSecond = bytesPerSecond == 0 ? instantaneous : (bytesPerSecond * 0.6 + instantaneous * 0.4)
-        lastSampleBytes = bytesTransferred
+        lastSampleBytes = total
+        lastSampleDate = now
     }
 
     private func finish(_ phase: Phase) {
@@ -378,6 +457,7 @@ final class ArchiveTransferEngine: ObservableObject {
     }
 
     private func reset() {
+        counter.reset()
         bytesTransferred = 0
         bytesPerSecond = 0
         elapsed = 0
@@ -413,6 +493,31 @@ final class ArchiveTransferEngine: ObservableObject {
 
     private func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+}
+
+// MARK: - Byte counter
+
+/// Thread-safe running total shared between pipe callbacks and the sampler.
+nonisolated final class ByteCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var total: Int64 = 0
+
+    func add(_ count: Int64) {
+        lock.lock(); total += count; lock.unlock()
+    }
+
+    func reset() {
+        lock.lock(); total = 0; lock.unlock()
+    }
+
+    func set(_ value: Int64) {
+        lock.lock(); total = value; lock.unlock()
+    }
+
+    var value: Int64 {
+        lock.lock(); defer { lock.unlock() }
+        return total
     }
 }
 

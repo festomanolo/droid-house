@@ -28,6 +28,7 @@ class DroidHouseCompanion : Service() {
         const val CHANNEL_ID = "droidhouse_companion_channel"
         const val NOTIFICATION_ID = 1001
         const val BRIDGE_PORT = 8080
+        const val ACTION_RESTART_BRIDGE = "com.droidhouse.companion.RESTART_BRIDGE"
 
         /** Mirrors the bridge's liveness for the Compose UI to observe. */
         @Volatile
@@ -43,10 +44,34 @@ class DroidHouseCompanion : Service() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Starting the bridge…"))
+        LanAccess.init(applicationContext)
 
         clipboardWatcher = ClipboardWatcher(applicationContext).apply { start() }
         screenshotWatcher = ScreenshotWatcher().apply { start() }
 
+        startBridge()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Wi-Fi mode changes the address the bridge binds to, so it has to be
+        // rebuilt; the watchers keep running throughout.
+        if (intent?.action == ACTION_RESTART_BRIDGE) {
+            stopBridge()
+            startBridge()
+        }
+        // Restart if the process is killed — the Mac expects the bridge to
+        // simply be there whenever the phone is.
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        stopBridge()
+        clipboardWatcher?.stop()
+        screenshotWatcher?.stop()
+        super.onDestroy()
+    }
+
+    private fun startBridge() {
         val bridge = BridgeServer(
             appContext = applicationContext,
             clipboardWatcher = clipboardWatcher!!,
@@ -59,7 +84,13 @@ class DroidHouseCompanion : Service() {
             server = bridge
             isBridgeRunning = true
             lastError = null
-            updateNotification("Bridge live on 127.0.0.1:$BRIDGE_PORT")
+            if (LanAccess.isEnabled) {
+                LanAccess.advertise(applicationContext, BRIDGE_PORT)
+                val address = LanAccess.localAddress() ?: "Wi-Fi"
+                updateNotification("Bridge live on $address:$BRIDGE_PORT · adb or Wi-Fi")
+            } else {
+                updateNotification("Bridge live on 127.0.0.1:$BRIDGE_PORT · adb only")
+            }
         } catch (error: Exception) {
             Log.e(TAG, "Bridge failed to start", error)
             isBridgeRunning = false
@@ -68,19 +99,11 @@ class DroidHouseCompanion : Service() {
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Restart if the process is killed — the Mac expects the bridge to
-        // simply be there whenever the phone is.
-        return START_STICKY
-    }
-
-    override fun onDestroy() {
+    private fun stopBridge() {
+        LanAccess.stopAdvertising(applicationContext)
         server?.stop()
         server = null
         isBridgeRunning = false
-        clipboardWatcher?.stop()
-        screenshotWatcher?.stop()
-        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

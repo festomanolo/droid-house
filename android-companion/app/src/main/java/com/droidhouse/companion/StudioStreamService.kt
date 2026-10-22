@@ -30,7 +30,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.serialization.json.Json
 import java.io.BufferedOutputStream
-import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
@@ -357,11 +356,13 @@ class StudioStreamService : Service() {
 
     private fun acceptLoop() {
         try {
-            val server = ServerSocket(PORT, 1, InetAddress.getByName("127.0.0.1"))
+            // Loopback for the adb tunnel; every interface in Wi-Fi mode, where
+            // LAN clients must authenticate before they get a single frame.
+            val server = ServerSocket(PORT, 4, LanAccess.bindAddress())
             server.reuseAddress = true
             serverSocket = server
 
-            val socket = server.accept()
+            val socket = LanAccess.acceptAuthorized(server) { running.get() }
             socket.tcpNoDelay = true
             socket.sendBufferSize = 1024 * 1024
             clientSocket = socket
@@ -527,10 +528,12 @@ class StudioStreamService : Service() {
         }
 
         // If same camera (e.g. logical multi-camera supporting 0.5x-10x zoom), apply zoom ratio smoothly
-        if (captureSession != null && captureRequestBuilder != null) {
-            applyLensZoomToBuilder(captureRequestBuilder!!, lensId)
-            val session = captureSession ?: return false
-            val builder = captureRequestBuilder ?: return false
+        // Snapshot both once: the camera thread can null them between a
+        // null check and a `!!`, which crashed the service mid-switch.
+        val session = captureSession
+        val builder = captureRequestBuilder
+        if (session != null && builder != null) {
+            applyLensZoomToBuilder(builder, lensId)
             return runCatching {
                 session.setRepeatingRequest(builder.build(), null, cameraHandler)
                 true

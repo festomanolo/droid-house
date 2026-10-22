@@ -54,6 +54,29 @@ public final class MacRemoteControlHost: ObservableObject {
     private let networkQueue = DispatchQueue(label: "com.droidhouse.remote.network", qos: .userInteractive)
     private let screenQueue = DispatchQueue(label: "com.droidhouse.remote.screen", qos: .userInitiated)
 
+    /// One frame may be captured, encoded or sitting in the send buffer at a
+    /// time. The timer used to enqueue a capture every tick regardless, so on
+    /// a large display (or a slow Tailscale/WAN link) frames piled up behind
+    /// each other: latency grew by the second and the CPU stayed pegged.
+    private let frameGateLock = NSLock()
+    private var frameInFlight = false
+
+    // Authentication state used to gate commands. Only touched on
+    // `networkQueue`, so it is always current when a message is checked.
+    // The published `isClientAuthenticated` is UI state updated
+    // asynchronously on main: a second client connecting just after an
+    // authenticated one could have its first commands accepted before that
+    // async reset landed.
+    private var authenticatedConnection: ObjectIdentifier?
+    private var failedAuthAttempts = 0
+    private var authLockedUntil: Date?
+
+    private static let logTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
     public static let shared = MacRemoteControlHost()
 
     public init() {
@@ -149,6 +172,7 @@ public final class MacRemoteControlHost: ObservableObject {
         }
 
         activeConnection = connection
+        authenticatedConnection = nil
 
         let endpointDesc = connection.endpoint.debugDescription
         let clientIP = extractIP(from: endpointDesc)
@@ -184,6 +208,8 @@ public final class MacRemoteControlHost: ObservableObject {
         stopScreenStreaming()
         stopCursorMonitoring()
         activeConnection = nil
+        authenticatedConnection = nil
+        releaseFrameGate()
         DispatchQueue.main.async {
             self.connectedClientName = nil
             self.connectedClientIP = nil
@@ -231,9 +257,24 @@ public final class MacRemoteControlHost: ObservableObject {
 
     private func handleEnvelope(_ envelope: MacRemoteProtocol.InboundEnvelope, from connection: NWConnection) {
         // Authentication check
-        if !isClientAuthenticated {
+        if authenticatedConnection != ObjectIdentifier(connection) {
             if envelope.type == "auth" {
+                if let lockedUntil = authLockedUntil, lockedUntil > Date() {
+                    let wait = Int(lockedUntil.timeIntervalSinceNow.rounded(.up))
+                    sendMessage(MacRemoteProtocol.OutboundEnvelope(
+                        type: "auth_fail",
+                        success: false,
+                        message: "Too many wrong PINs. Try again in \(wait)s."
+                    ))
+                    connection.cancel()
+                    handleClientDisconnect()
+                    return
+                }
+
                 if let pin = envelope.pin, pin == self.pairingPin {
+                    authenticatedConnection = ObjectIdentifier(connection)
+                    failedAuthAttempts = 0
+                    authLockedUntil = nil
                     let clientName = envelope.deviceName ?? "Android Companion"
                     DispatchQueue.main.async {
                         self.isClientAuthenticated = true
@@ -262,7 +303,18 @@ public final class MacRemoteControlHost: ObservableObject {
                     self.startCursorMonitoring()
                     self.broadcastCurrentCursor(force: true)
                 } else {
-                    logEvent("Authentication failed: Invalid PIN '\(envelope.pin ?? "")'")
+                    // Without a limit a short PIN reachable over Tailscale/WAN
+                    // falls to a brute-force loop in seconds. After five misses
+                    // each further miss locks pairing out for twice as long,
+                    // capped at 15 minutes.
+                    failedAuthAttempts += 1
+                    if failedAuthAttempts >= 5 {
+                        let lockout = min(900.0, 30.0 * pow(2.0, Double(failedAuthAttempts - 5)))
+                        authLockedUntil = Date().addingTimeInterval(lockout)
+                        logEvent("Authentication failed (\(failedAuthAttempts) attempts) — pairing locked for \(Int(lockout))s")
+                    } else {
+                        logEvent("Authentication failed: wrong PIN")
+                    }
                     let failResponse = MacRemoteProtocol.OutboundEnvelope(
                         type: "auth_fail",
                         success: false,
@@ -379,11 +431,20 @@ public final class MacRemoteControlHost: ObservableObject {
         connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
     }
 
-    public func sendBinaryData(_ data: Data) {
-        guard let connection = activeConnection else { return }
+    /// - Parameter sent: Called once the network stack has taken the data
+    ///   (or the send failed), which is the backpressure signal for streaming.
+    public func sendBinaryData(_ data: Data, sent: (() -> Void)? = nil) {
+        guard let connection = activeConnection else {
+            sent?()
+            return
+        }
         let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
         let context = NWConnection.ContentContext(identifier: "binary", metadata: [metadata])
-        connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
+        if let sent {
+            connection.send(content: data, contentContext: context, isComplete: true, completion: .contentProcessed { _ in sent() })
+        } else {
+            connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
+        }
     }
 
     // MARK: - CoreGraphics Event Synthesis
@@ -765,11 +826,21 @@ public final class MacRemoteControlHost: ObservableObject {
     public func captureAndSendSingleFrame() {
         guard isClientAuthenticated, activeConnection != nil else { return }
 
+        frameGateLock.lock()
+        if frameInFlight {
+            frameGateLock.unlock()
+            return // Drop this tick; the previous frame is still on its way.
+        }
+        frameInFlight = true
+        frameGateLock.unlock()
+
         let scale = self.streamScale
         let quality = self.streamQuality
 
         screenQueue.async { [weak self] in
             guard let self = self else { return }
+            var handedOff = false
+            defer { if !handedOff { self.releaseFrameGate() } }
 
             guard let cgImage = self.captureDesktopCGImage() else { return }
 
@@ -838,8 +909,15 @@ public final class MacRemoteControlHost: ObservableObject {
             packet.append(Data(bytes: &curY, count: 2))
             packet.append(jpegData)
 
-            self.sendBinaryData(packet)
+            handedOff = true
+            self.sendBinaryData(packet) { [weak self] in self?.releaseFrameGate() }
         }
+    }
+
+    private func releaseFrameGate() {
+        frameGateLock.lock()
+        frameInFlight = false
+        frameGateLock.unlock()
     }
 
     private func drawMacCursor(in context: CGContext, at point: CGPoint, scale: CGFloat) {
@@ -1037,9 +1115,7 @@ public final class MacRemoteControlHost: ObservableObject {
     // MARK: - Activity Logging
 
     private func logEvent(_ message: String) {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        let timestamp = formatter.string(from: Date())
+        let timestamp = Self.logTimeFormatter.string(from: Date())
         let entry = "[\(timestamp)] \(message)"
 
         DispatchQueue.main.async {

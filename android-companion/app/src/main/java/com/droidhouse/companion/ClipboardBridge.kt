@@ -156,7 +156,9 @@ class ClipboardTileService : TileService() {
         qsTile?.apply {
             state = if (DroidHouseCompanion.isBridgeRunning) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             label = "Clip → Mac"
-            subtitle = if (DroidHouseCompanion.isBridgeRunning) "Bridge live" else "Bridge offline"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                subtitle = if (DroidHouseCompanion.isBridgeRunning) "Bridge live" else "Bridge offline"
+            }
             updateTile()
         }
     }

@@ -277,23 +277,22 @@ struct SidebarView: View {
 
     private func startUploadURLs(_ urls: [URL], into destination: String) {
         Task {
+            var failures: [String] = []
             for url in urls {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                var isDir: ObjCBool = false
-                FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-                if isDir.boolValue {
-                    let name = url.lastPathComponent
-                    let dest = destination.hasSuffix("/") ? "\(destination)\(name)" : "\(destination)/\(name)"
-                    try? await adbService.makeDirectory(path: dest)
-                    if let contents = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) {
-                        for item in contents {
-                            try? await adbService.pushFile(localPath: item.path, remotePath: dest)
-                        }
-                    }
-                } else {
-                    try? await adbService.pushFile(localPath: url.path, remotePath: destination)
+                // `adb push` recurses into folders itself; the previous manual
+                // walk only went one level deep and silently dropped errors.
+                do {
+                    try await adbService.pushFile(localPath: url.path, remotePath: destination, refreshListing: false)
+                } catch is CancellationError {
+                } catch {
+                    failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
                 }
+            }
+            await adbService.refreshCurrentFolder()
+            if !failures.isEmpty {
+                adbService.operationError = "Upload failed for \(failures.joined(separator: "\n"))"
             }
         }
     }
@@ -339,12 +338,12 @@ struct DeviceCard: View {
                             .font(.system(size: 13, weight: .semibold))
                             .lineLimit(1)
                         HStack(spacing: 4) {
-                            Image(systemName: device.connectionType == .wireless ? "wifi" : "cable.connector")
+                            Image(systemName: device.connectionType == .usb ? "cable.connector" : "wifi")
                                 .font(.system(size: 9))
-                            Text(device.connectionType.rawValue)
+                            Text(device.isCompanionOnly ? "Wi-Fi · no adb" : device.connectionType.rawValue)
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundStyle(device.connectionType == .wireless ? Color.green : Color.secondary)
+                        .foregroundStyle(device.connectionType == .usb ? Color.secondary : Color.green)
                     }
 
                     Spacer()

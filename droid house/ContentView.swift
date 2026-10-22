@@ -89,9 +89,11 @@ struct MacOSSplashScreenView: View {
 
 struct ContentView: View {
     @StateObject private var adbService = ADBService()
-    @StateObject private var companionSync = CompanionSync.shared
-    @ObservedObject var transferManager = TransferManager.shared
-    
+    // Deliberately not observed: this view only calls into the bridge. As an
+    // observer, every 4 s companion poll and every transfer progress tick
+    // re-rendered the entire window, including the file browser.
+    private let companionSync = CompanionSync.shared
+
     @State private var selectedSection: NavigationSection = .device
     @State private var layoutMode: MainExplorerView.LayoutMode = .icon
     @State private var searchText: String = ""
@@ -155,8 +157,8 @@ struct ContentView: View {
             Task {
                 await adbService.detectDevices()
                 if selectedDevice == nil { selectedDevice = adbService.selectedDevice }
-                if let firstDevice = adbService.connectedDevices.first {
-                    await companionSync.setupPortForwarding(serial: firstDevice.id, adbPath: adbService.adbPath)
+                if let device = adbService.selectedDevice ?? adbService.connectedDevices.first {
+                    await companionSync.attach(to: device, adbPath: adbService.adbPath)
                 }
             }
         }
@@ -168,6 +170,11 @@ struct ContentView: View {
         // stayed greyed out until the user happened to click the device card.
         .onChange(of: adbService.selectedDevice) { _, device in
             if selectedDevice?.id != device?.id { selectedDevice = device }
+            // Messages, clipboard, AeroCast etc. follow the selected phone,
+            // whether it's on adb or paired over Wi-Fi.
+            if let device {
+                Task { await companionSync.attach(to: device, adbPath: adbService.adbPath) }
+            }
         }
         .onChange(of: adbService.connectedDevices) { _, newValue in
             if !newValue.isEmpty && showOnboarding {
@@ -175,9 +182,9 @@ struct ContentView: View {
                     showOnboarding = false
                 }
             }
-            if let firstDevice = newValue.first {
+            if let device = adbService.selectedDevice ?? newValue.first {
                 Task {
-                    await companionSync.setupPortForwarding(serial: firstDevice.id, adbPath: adbService.adbPath)
+                    await companionSync.attach(to: device, adbPath: adbService.adbPath)
                 }
             }
         }
@@ -304,7 +311,7 @@ struct ContentView: View {
                         await adbService.detectDevices()
                         if let device = adbService.selectedDevice {
                             await adbService.fetchStorageInfo(device: device)
-                            await companionSync.setupPortForwarding(serial: device.id, adbPath: adbService.adbPath)
+                            await companionSync.attach(to: device, adbPath: adbService.adbPath)
                         }
                     }
                 } label: {
@@ -317,7 +324,7 @@ struct ContentView: View {
                 } label: {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                 }
-                .help("Wireless Connect")
+                .help("Connect over Wi-Fi (no adb needed)")
 
                 Button {
                     showInspector.toggle()
@@ -338,11 +345,21 @@ struct ContentView: View {
     }
 
     private var wirelessConnectionSheet: some View {
-        VStack(spacing: 20) {
-            Text("Wireless Connection")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Connect a Phone")
+                .font(.title3.weight(.semibold))
+
+            WiFiPairingSection(adbService: adbService)
+
+            Divider()
 
             VStack(alignment: .leading, spacing: 8) {
+                Label("Wireless adb", systemImage: "antenna.radiowaves.left.and.right")
+                    .font(.headline)
+                Text("Only if you use adb: needs USB debugging and, usually, a cable once to enable TCP mode.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("Device IP Address")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -370,13 +387,14 @@ struct ContentView: View {
             }
 
             HStack(spacing: 12) {
-                Button("Cancel") {
+                Spacer()
+                Button("Done") {
                     showWirelessSheet = false
                     wirelessError = nil
                 }
                 .disabled(isConnecting)
 
-                Button(isConnecting ? "Connecting…" : "Connect") {
+                Button(isConnecting ? "Connecting…" : "Connect adb") {
                     Task {
                         isConnecting = true
                         wirelessError = nil
@@ -389,12 +407,11 @@ struct ContentView: View {
                         isConnecting = false
                     }
                 }
-                .keyboardShortcut(.defaultAction)
                 .disabled(wirelessIP.isEmpty || isConnecting)
             }
         }
         .padding(24)
-        .frame(width: 280)
+        .frame(width: 440)
     }
 
     private func prepareWirelessConnection() {

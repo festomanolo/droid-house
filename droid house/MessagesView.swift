@@ -99,16 +99,16 @@ struct MessagesView: View {
 
     private var thread: some View {
         ScrollViewReader { proxy in
+            let quotes = ReplyTag.resolveQuotedMessages(in: companionSync.activeMessages)
             ScrollView {
-                VStack(spacing: 6) {
+                // Lazy: a long SMS thread built every bubble up front, and the
+                // whole thread re-renders on each keystroke in the composer.
+                LazyVStack(spacing: 6) {
                     ForEach(companionSync.activeMessages) { message in
                         ChatBubble(
                             message: message,
                             isFreshArrival: message.id == companionSync.latestArrivalID,
-                            quotedMessage: ReplyTag.resolveQuotedMessage(
-                                for: message,
-                                in: companionSync.activeMessages
-                            ),
+                            quotedMessage: quotes[message.id],
                             onReply: { target in
                                 withAnimation(Spatial.Motion.bouncy) { replyingTo = target }
                                 isInputFocused = true

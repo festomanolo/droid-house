@@ -97,6 +97,8 @@ final class StudioCamEngine: NSObject, ObservableObject {
 
     private var adbPath: String = ADBLocator.resolve()
     private var deviceSerial: String?
+    /// Where the companion's bridge and camera socket are for this session.
+    private var streamEndpoint: CompanionEndpoint = .loopback
 
     // Stats
     private var statsTimer: Timer?
@@ -248,57 +250,50 @@ final class StudioCamEngine: NSObject, ObservableObject {
     }
 
     private func sendLensRequest(lensId: String) async {
-        guard let url = URL(string: "http://127.0.0.1:8080/api/studio/lens") else { return }
+        guard let url = URL(string: "\(streamEndpoint.baseURL)/api/studio/lens") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body = ["lensId": lensId]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        streamEndpoint.authorize(&request)
         _ = try? await URLSession.shared.data(for: request)
     }
 
     private func sendZoomRequest(zoomRatio: Float) async {
-        guard let url = URL(string: "http://127.0.0.1:8080/api/studio/zoom") else { return }
+        guard let url = URL(string: "\(streamEndpoint.baseURL)/api/studio/zoom") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body = ["zoomRatio": zoomRatio]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        streamEndpoint.authorize(&request)
         _ = try? await URLSession.shared.data(for: request)
     }
 
     private func sendTorchRequest(enabled: Bool) async {
-        guard let url = URL(string: "http://127.0.0.1:8080/api/studio/torch") else { return }
+        guard let url = URL(string: "\(streamEndpoint.baseURL)/api/studio/torch") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body = ["enabled": enabled]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        streamEndpoint.authorize(&request)
         _ = try? await URLSession.shared.data(for: request)
     }
 
     // MARK: - Stream Setup
 
     private func startStudioStream(serial: String) async {
-        state = .connecting("Forwarding Studio port \(StudioCamProtocol.defaultPort)...")
-
-        let forwarded = await runADB([
-            "-s", serial, "forward",
-            "tcp:\(StudioCamProtocol.defaultPort)",
-            "tcp:\(StudioCamProtocol.defaultPort)"
-        ])
-
-        guard forwarded != nil else {
-            state = .failed("Could not forward ADB port \(StudioCamProtocol.defaultPort).")
-            return
+        // A Wi-Fi phone's camera socket is reached directly; there is no adb
+        // to forward through or to launch the companion with.
+        if let endpoint = CompanionLink.wifiEndpoint(for: serial) {
+            streamEndpoint = endpoint
+        } else {
+            streamEndpoint = .loopback
+            await prepareOverADB(serial: serial)
+            if case .failed = state { return }
         }
-
-        // Ensure companion app is active so hardware camera/mic access is granted
-        _ = await runADB([
-            "-s", serial, "shell",
-            "am", "start", "-n", "com.droidhouse.companion/.MainActivity",
-            "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER"
-        ])
 
         state = .connecting("Starting camera sensor & studio mic on phone...")
 
@@ -318,11 +313,34 @@ final class StudioCamEngine: NSObject, ObservableObject {
         openSocket()
     }
 
+    private func prepareOverADB(serial: String) async {
+        state = .connecting("Forwarding Studio port \(StudioCamProtocol.defaultPort)...")
+
+        let forwarded = await runADB([
+            "-s", serial, "forward",
+            "tcp:\(StudioCamProtocol.defaultPort)",
+            "tcp:\(StudioCamProtocol.defaultPort)"
+        ])
+
+        guard forwarded != nil else {
+            state = .failed("Could not forward ADB port \(StudioCamProtocol.defaultPort).")
+            return
+        }
+
+        // Ensure companion app is active so hardware camera/mic access is granted
+        _ = await runADB([
+            "-s", serial, "shell",
+            "am", "start", "-n", "com.droidhouse.companion/.MainActivity",
+            "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER"
+        ])
+    }
+
     private func openSocket() {
         let endpoint = NWEndpoint.hostPort(
-            host: NWEndpoint.Host("127.0.0.1"),
+            host: NWEndpoint.Host(streamEndpoint.host),
             port: NWEndpoint.Port(rawValue: StudioCamProtocol.defaultPort)!
         )
+        let preamble = streamEndpoint.streamPreamble
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.noDelay = true
         let params = NWParameters(tls: nil, tcp: tcpOptions)
@@ -333,6 +351,10 @@ final class StudioCamEngine: NSObject, ObservableObject {
                 guard let self else { return }
                 switch state {
                 case .ready:
+                    // LAN clients must authenticate before the phone streams.
+                    if let preamble {
+                        conn.send(content: preamble, completion: .idempotent)
+                    }
                     self.receiveLoop()
                 case .failed(let err):
                     if self.state.isBusy || self.state.isLive {
@@ -621,7 +643,7 @@ final class StudioCamEngine: NSObject, ObservableObject {
     // MARK: - REST Bridge Controls
 
     private func requestStudioStart() async throws {
-        guard let url = URL(string: "http://127.0.0.1:8080/api/studio/start") else { return }
+        guard let url = URL(string: "\(streamEndpoint.baseURL)/api/studio/start") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -637,6 +659,7 @@ final class StudioCamEngine: NSObject, ObservableObject {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
+        streamEndpoint.authorize(&request)
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw NSError(domain: "StudioCam", code: 1, userInfo: [NSLocalizedDescriptionKey: "Phone returned non-200"])
@@ -644,9 +667,10 @@ final class StudioCamEngine: NSObject, ObservableObject {
     }
 
     private func requestStudioStop(serial: String) async {
-        guard let url = URL(string: "http://127.0.0.1:8080/api/studio/stop") else { return }
+        guard let url = URL(string: "\(streamEndpoint.baseURL)/api/studio/stop") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
+        streamEndpoint.authorize(&req)
         _ = try? await URLSession.shared.data(for: req)
     }
 
@@ -667,30 +691,12 @@ final class StudioCamEngine: NSObject, ObservableObject {
         }
     }
 
+    /// The previous version waited for exit before reading the pipe, which
+    /// deadlocks as soon as adb prints more than the 64 KB pipe buffer, and
+    /// it broke outright when adb was only resolvable by name.
     private func runADB(_ arguments: [String]) async -> String? {
-        let path = self.adbPath
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: path)
-                process.arguments = arguments
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = pipe
-
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    if process.terminationStatus == 0 {
-                        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                        continuation.resume(returning: String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines))
-                    } else {
-                        continuation.resume(returning: nil)
-                    }
-                } catch {
-                    continuation.resume(returning: nil)
-                }
-            }
-        }
+        guard let output = try? await ADBProcess.run(adb: adbPath, arguments: arguments),
+              output.status == 0 else { return nil }
+        return output.stdoutString.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
