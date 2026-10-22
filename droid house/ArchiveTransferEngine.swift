@@ -98,6 +98,8 @@ final class ArchiveTransferEngine: ObservableObject {
 
     private let adbPath: String
     private var worker: Process?
+    /// The transfer when the phone is reached over Wi-Fi instead of adb.
+    private var wifiTask: Task<Void, Never>?
     private var sampler: Task<Void, Never>?
     private var startDate: Date?
     private var lastSampleBytes: Int64 = 0
@@ -125,6 +127,20 @@ final class ArchiveTransferEngine: ObservableObject {
         phase = .preparing
         appendLog("Backing up \(relativePaths.count) location(s) from \(remoteRoot)", isError: false)
 
+        // Wi-Fi: the companion runs the same tar on the phone and streams it.
+        if let endpoint = CompanionLink.wifiEndpoint(for: serial) {
+            beginSampling()
+            runOverWiFi(removingOnFailure: destination) { counter in
+                try await CompanionFiles(endpoint: endpoint)
+                    .downloadTar(root: remoteRoot, paths: relativePaths, to: destination) { counter.set($0) }
+            } onSuccess: { [weak self] in
+                self?.lastArchiveURL = destination
+                let size = (try? FileManager.default.attributesOfItem(atPath: destination.path))?[.size] as? Int64 ?? 0
+                self?.appendLog("Archive written over Wi-Fi (\(ByteFormat.string(size))). Timestamps embedded losslessly.", isError: false)
+            }
+            return
+        }
+
         // Build:  cd <root> && tar -cf - 'p1' 'p2' …
         // Single quotes: inside double quotes the device shell still expands
         // $, ` and \, so a folder named with any of them archived the wrong path.
@@ -145,6 +161,17 @@ final class ArchiveTransferEngine: ObservableObject {
         phase = .preparing
         appendLog("Restoring archive \(archive.lastPathComponent) into \(remoteRoot)", isError: false)
 
+        if let endpoint = CompanionLink.wifiEndpoint(for: serial) {
+            beginSampling()
+            runOverWiFi(removingOnFailure: nil) { counter in
+                try await CompanionFiles(endpoint: endpoint)
+                    .uploadTar(archive, into: remoteRoot) { counter.set($0) }
+            } onSuccess: { [weak self] in
+                self?.appendLog("Extraction finished — POSIX modification dates restored on device.", isError: false)
+            }
+            return
+        }
+
         // toybox `tar x` restores mtime by default (we deliberately avoid -m).
         let remoteCommand = "cd \(shellQuote(remoteRoot)) && tar -xf -"
         let arguments = ["-s", serial, "shell", remoteCommand]
@@ -159,6 +186,8 @@ final class ArchiveTransferEngine: ObservableObject {
         appendLog("Cancellation requested — terminating stream.", isError: false)
         worker?.terminate()
         worker = nil
+        wifiTask?.cancel()
+        wifiTask = nil
         finish(.cancelled)
     }
 
@@ -354,6 +383,33 @@ final class ArchiveTransferEngine: ObservableObject {
         }
     }
 
+    // MARK: - Wi-Fi (companion) transfers
+
+    private func runOverWiFi(
+        removingOnFailure partial: URL?,
+        _ work: @escaping (ByteCounter) async throws -> Void,
+        onSuccess: @escaping () -> Void
+    ) {
+        phase = .streaming
+        appendLog("Streaming tar archive over Wi-Fi…", isError: false)
+        let counter = self.counter
+        wifiTask = Task { [weak self] in
+            do {
+                try await work(counter)
+                guard let self, self.phase != .cancelled else { return }
+                self.sampleRate()
+                self.phase = .finalizing
+                onSuccess()
+                self.finish(.completed)
+            } catch {
+                // A cut-off tar looks valid until extraction fails halfway.
+                if let partial { try? FileManager.default.removeItem(at: partial) }
+                guard let self, self.phase != .cancelled else { return }
+                self.finish(.failed(error.localizedDescription))
+            }
+        }
+    }
+
     // MARK: - Progress plumbing
 
     private func beginSampling() {
@@ -453,6 +509,10 @@ nonisolated final class ByteCounter: @unchecked Sendable {
 
     func reset() {
         lock.lock(); total = 0; lock.unlock()
+    }
+
+    func set(_ value: Int64) {
+        lock.lock(); total = value; lock.unlock()
     }
 
     var value: Int64 {
