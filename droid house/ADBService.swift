@@ -57,14 +57,16 @@ class ADBService: ObservableObject {
     /// device when none is chosen, and gracefully handles the selected device
     /// disappearing (USB unplug, Wi-Fi drop, device switch).
     private func reconcileDevices() async {
-        let devices: [ADBDevice]
+        let adbDevices: [ADBDevice]
         do {
             let output = try await runADBCommand(["devices", "-l"], timeout: 8)
-            devices = parseDevices(output)
+            adbDevices = parseDevices(output)
         } catch {
-            // Transient adb server hiccup — don't nuke UI state, try next tick.
-            return
+            // Transient adb server hiccup (or no adb installed at all) — keep
+            // the adb devices we had and still pick up Wi-Fi companions.
+            adbDevices = connectedDevices.filter { !$0.isCompanionOnly }
         }
+        let devices = withCompanions(adbDevices)
 
         // This runs every 4 s. Assigning an identical array still fires
         // objectWillChange, which re-rendered the whole window each tick.
@@ -136,18 +138,32 @@ class ADBService: ObservableObject {
     func detectDevices() async {
         lastError = nil
 
-        do {
-            let output = try await runADBCommand(["devices", "-l"])
-            let devices = parseDevices(output)
-            if devices != connectedDevices { connectedDevices = devices }
+        let store = WiFiCompanionStore.shared
+        store.start()
+        await store.refreshReachability()
 
-            // Auto-select first device if none selected
-            if selectedDevice == nil, let first = connectedDevices.first {
-                selectedDevice = first
-                await listFiles(path: currentPath)
-            }
+        var adbFailure: Error?
+        let adbDevices: [ADBDevice]
+        do {
+            adbDevices = parseDevices(try await runADBCommand(["devices", "-l"]))
         } catch {
-            lastError = "Failed to detect devices: \(error.localizedDescription)"
+            adbDevices = []
+            adbFailure = error
+        }
+
+        let devices = withCompanions(adbDevices)
+        if devices != connectedDevices { connectedDevices = devices }
+
+        // Auto-select first device if none selected
+        if selectedDevice == nil, let first = connectedDevices.first {
+            selectedDevice = first
+            await listFiles(path: currentPath)
+        }
+
+        // Without adb a paired Wi-Fi phone is all we need, so a missing adb is
+        // only worth reporting when there is nothing to show at all.
+        if devices.isEmpty, let adbFailure, store.paired.isEmpty {
+            lastError = "No adb devices (\(adbFailure.localizedDescription)). Pair the phone over Wi-Fi from the Connect button — no adb needed."
         }
 
         if let device = selectedDevice {
@@ -156,6 +172,20 @@ class ADBService: ObservableObject {
         }
     }
     
+    /// adb devices plus every paired companion reachable over Wi-Fi.
+    private func withCompanions(_ adbDevices: [ADBDevice]) -> [ADBDevice] {
+        adbDevices + WiFiCompanionStore.shared.connectedDevices(excludingSerials: adbDevices.map(\.id))
+    }
+
+    /// The bridge's file API for a Wi-Fi device; nil for adb devices.
+    private func companionFiles(for device: ADBDevice) throws -> CompanionFiles? {
+        guard device.isCompanionOnly else { return nil }
+        guard let endpoint = CompanionLink.wifiEndpoint(for: device.id) else {
+            throw ADBError.connectionFailed("\(device.displayName) is no longer paired over Wi-Fi.")
+        }
+        return CompanionFiles(endpoint: endpoint)
+    }
+
     private func parseDevices(_ output: String) -> [ADBDevice] {
         var devices: [ADBDevice] = []
         let lines = output.components(separatedBy: "\n")
@@ -240,6 +270,9 @@ class ADBService: ObservableObject {
     }
 
     private func listing(device: ADBDevice, path: String) async throws -> [RemoteFile] {
+        if let files = try companionFiles(for: device) {
+            return sortFiles(try await files.list(path))
+        }
         let quoted = Self.shellQuote(path)
         // -L follows symlinks so linked folders show as folders. `ls` exits
         // non-zero if any single entry can't be read, but still lists the
@@ -374,9 +407,25 @@ class ADBService: ObservableObject {
 
         let arguments = ["-s", device.id, "pull", "-a", remotePath, localPath]
 
+        // Over Wi-Fi the bytes come from the bridge instead of `adb pull`.
+        let files = try companionFiles(for: device)
+        let transfer: () async throws -> Void
+        if let files {
+            let isDirectory: Bool
+            if let known = currentFiles.first(where: { $0.fullPath == remotePath }) {
+                isDirectory = known.isDirectory
+            } else {
+                // Only a folder can be listed.
+                isDirectory = (try? await files.list(remotePath)) != nil
+            }
+            transfer = { try await files.download(remotePath: remotePath, isDirectory: isDirectory, to: localPath) }
+        } else {
+            transfer = { _ = try await self.runADBCommand(arguments, timeout: nil) }
+        }
+
         guard tracksProgress else {
             do {
-                _ = try await runADBCommand(arguments, timeout: nil)
+                try await transfer()
             } catch {
                 try? FileManager.default.removeItem(atPath: localPath)
                 throw error
@@ -403,7 +452,7 @@ class ADBService: ObservableObject {
             // No timeout: a multi-gigabyte video over Wi-Fi can take far longer
             // than any fixed limit, and the old 600 s cap killed such pulls
             // mid-stream. The user cancels from the transfer pill instead.
-            try await runTracked(arguments, transferID: transferID)
+            try await runTracked(transfer, transferID: transferID)
 
             guard FileManager.default.fileExists(atPath: localPath) else {
                 throw ADBError.commandFailed("adb reported success but no file was written.")
@@ -449,12 +498,28 @@ class ADBService: ObservableObject {
         )
 
         let destFile = remotePath.hasSuffix("/") ? "\(remotePath)\(fileName)" : "\(remotePath)/\(fileName)"
-        let poller = pollRemoteBytes(device: device, path: destFile, transferID: transferID)
-        defer { poller.cancel() }
+        let files = try companionFiles(for: device)
+
+        // The bridge reports upload progress itself; adb has to be polled.
+        let poller: Task<Void, Never>? = files == nil
+            ? pollRemoteBytes(device: device, path: destFile, transferID: transferID)
+            : nil
+        defer { poller?.cancel() }
+
+        let transfer: () async throws -> Void
+        if let files {
+            transfer = {
+                try await files.upload(localPath: localPath, toDirectory: remotePath) { sent in
+                    Task { @MainActor in TransferManager.shared.updateBytes(id: transferID, bytesTransferred: sent) }
+                }
+            }
+        } else {
+            transfer = { _ = try await self.runADBCommand(["-s", device.id, "push", localPath, remotePath], timeout: nil) }
+        }
 
         do {
-            try await runTracked(["-s", device.id, "push", localPath, remotePath], transferID: transferID)
-            poller.cancel()
+            try await runTracked(transfer, transferID: transferID)
+            poller?.cancel()
             if total > 0 {
                 TransferManager.shared.updateBytes(id: transferID, bytesTransferred: total)
             }
@@ -481,8 +546,8 @@ class ADBService: ObservableObject {
     /// Runs a transfer's adb command as a child task the transfer pill can
     /// cancel. Cancelling terminates adb itself; previously the pill only
     /// removed the row while adb kept copying in the background.
-    private func runTracked(_ arguments: [String], transferID: UUID) async throws {
-        let work = Task { try await self.runADBCommand(arguments, timeout: nil) }
+    private func runTracked(_ transfer: @escaping () async throws -> Void, transferID: UUID) async throws {
+        let work = Task { try await transfer() }
         TransferManager.shared.setCancelHandler(id: transferID) { work.cancel() }
         _ = try await withTaskCancellationHandler {
             try await work.value
@@ -493,6 +558,9 @@ class ADBService: ObservableObject {
 
     /// Byte size of a remote file, or the recursive size of a folder.
     private func remotePayloadSize(device: ADBDevice, path: String) async -> Int64? {
+        if let files = try? companionFiles(for: device) {
+            return await files.size(path)
+        }
         let quoted = Self.shellQuote(path)
         let command = "if [ -d \(quoted) ]; then echo D $(du -sk \(quoted) 2>/dev/null | cut -f1); else echo F $(stat -c %s \(quoted)); fi"
         guard let out = try? await runADBCommand(shellArguments(device: device, command), timeout: 15, allowFailure: true) else {
@@ -560,17 +628,21 @@ class ADBService: ObservableObject {
             throw ADBError.noDevice
         }
         
-        _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(Self.shellQuote(path))"))
+        if let files = try companionFiles(for: device) {
+            try await files.delete([path])
+        } else {
+            _ = try await runADBCommand(shellArguments(device: device, "rm -rf \(Self.shellQuote(path))"))
+        }
         await listFiles(path: currentPath) // Refresh
     }
     
     func createFolder(name: String) async throws {
-        guard let device = selectedDevice else {
+        guard selectedDevice != nil else {
             throw ADBError.noDevice
         }
 
         let newPath = currentPath.hasSuffix("/") ? "\(currentPath)\(name)" : "\(currentPath)/\(name)"
-        _ = try await runADBCommand(shellArguments(device: device, "mkdir -p \(Self.shellQuote(newPath))"))
+        try await makeDirectory(path: newPath)
         await listFiles(path: currentPath) // Refresh
     }
 
@@ -578,6 +650,10 @@ class ADBService: ObservableObject {
     /// refreshing the listing — used by batch/recursive uploads.
     func makeDirectory(path: String) async throws {
         guard let device = selectedDevice else { throw ADBError.noDevice }
+        if let files = try companionFiles(for: device) {
+            try await files.makeDirectory(path)
+            return
+        }
         _ = try await runADBCommand(shellArguments(device: device, "mkdir -p \(Self.shellQuote(path))"))
     }
     
@@ -588,7 +664,7 @@ class ADBService: ObservableObject {
         
         let directory = (oldPath as NSString).deletingLastPathComponent
         let newPath = directory.hasSuffix("/") ? "\(directory)\(newName)" : "\(directory)/\(newName)"
-        _ = try await runADBCommand(shellArguments(device: device, "mv \(Self.shellQuote(oldPath)) \(Self.shellQuote(newPath))"))
+        try await move(device: device, from: oldPath, to: newPath)
         await listFiles(path: currentPath) // Refresh
     }
     
@@ -641,13 +717,9 @@ class ADBService: ObservableObject {
             do {
                 switch clipboardOperation {
                 case .copy:
-                    if file.isDirectory {
-                        _ = try await runADBCommand(shellArguments(device: device, "cp -r \(Self.shellQuote(file.fullPath)) \(Self.shellQuote(destPath))"))
-                    } else {
-                        _ = try await runADBCommand(shellArguments(device: device, "cp \(Self.shellQuote(file.fullPath)) \(Self.shellQuote(destPath))"))
-                    }
+                    try await copy(device: device, file, to: destPath)
                 case .cut:
-                    _ = try await runADBCommand(shellArguments(device: device, "mv \(Self.shellQuote(file.fullPath)) \(Self.shellQuote(destPath))"))
+                    try await move(device: device, from: file.fullPath, to: destPath)
                 case .none:
                     break
                 }
@@ -671,9 +743,16 @@ class ADBService: ObservableObject {
         await listFiles(path: currentPath)
     }
     
-    func deleteFiles(_ files: [RemoteFile]) async throws {
+    func deleteFiles(_ targets: [RemoteFile]) async throws {
+        let files = targets
         guard let device = selectedDevice else {
             throw ADBError.noDevice
+        }
+
+        if let files = try companionFiles(for: device) {
+            try await files.delete(targets.map(\.fullPath))
+            await listFiles(path: currentPath)
+            return
         }
 
         // One shell round-trip per batch instead of one per file; chunked so a
@@ -696,11 +775,7 @@ class ADBService: ObservableObject {
             let ext = (file.name as NSString).pathExtension
             let newName = ext.isEmpty ? "\(base) copy" : "\(base) copy.\(ext)"
             let dest = dir.hasSuffix("/") ? "\(dir)\(newName)" : "\(dir)/\(newName)"
-            if file.isDirectory {
-                _ = try await runADBCommand(shellArguments(device: device, "cp -r \(Self.shellQuote(file.fullPath)) \(Self.shellQuote(dest))"))
-            } else {
-                _ = try await runADBCommand(shellArguments(device: device, "cp \(Self.shellQuote(file.fullPath)) \(Self.shellQuote(dest))"))
-            }
+            try await copy(device: device, file, to: dest)
         }
 
         await listFiles(path: currentPath)
@@ -713,12 +788,31 @@ class ADBService: ObservableObject {
         
         for file in files {
             let destPath = destinationPath.hasSuffix("/") ? "\(destinationPath)\(file.name)" : "\(destinationPath)/\(file.name)"
-            _ = try await runADBCommand(shellArguments(device: device, "mv \(Self.shellQuote(file.fullPath)) \(Self.shellQuote(destPath))"))
+            try await move(device: device, from: file.fullPath, to: destPath)
         }
         
         await listFiles(path: currentPath)
     }
     
+    /// `mv` over adb, or the bridge's move over Wi-Fi.
+    private func move(device: ADBDevice, from: String, to: String) async throws {
+        if let files = try companionFiles(for: device) {
+            try await files.move(from: from, to: to)
+        } else {
+            _ = try await runADBCommand(shellArguments(device: device, "mv \(Self.shellQuote(from)) \(Self.shellQuote(to))"))
+        }
+    }
+
+    /// `cp [-r]` over adb, or the bridge's copy over Wi-Fi.
+    private func copy(device: ADBDevice, _ file: RemoteFile, to destination: String) async throws {
+        if let files = try companionFiles(for: device) {
+            try await files.copy(from: file.fullPath, to: destination)
+        } else {
+            let flag = file.isDirectory ? "cp -r" : "cp"
+            _ = try await runADBCommand(shellArguments(device: device, "\(flag) \(Self.shellQuote(file.fullPath)) \(Self.shellQuote(destination))"))
+        }
+    }
+
     // MARK: - Wireless Connection
     
     func connectWireless(ip: String, port: Int = 5555) async throws {
@@ -744,7 +838,10 @@ class ADBService: ObservableObject {
     
     func getDeviceIP() async -> String? {
         guard let device = selectedDevice else { return nil }
-        
+        if device.isCompanionOnly {
+            return CompanionLink.wifiEndpoint(for: device.id)?.host
+        }
+
         do {
             let output = try await runADBCommand(["-s", device.id, "shell", "ip", "route"])
             // Parse: ... src 192.168.x.x ...
@@ -762,6 +859,10 @@ class ADBService: ObservableObject {
     // MARK: - Storage Detection
     
     func fetchStorageInfo(device: ADBDevice) async {
+        if let files = try? companionFiles(for: device) {
+            if let info = try? await files.storage(), info != storageInfo { storageInfo = info }
+            return
+        }
         do {
             let output = try await runADBCommand(["-s", device.id, "shell", "df", "-h"])
             let info = parseStorage(output)
@@ -818,6 +919,10 @@ class ADBService: ObservableObject {
     
     func fetchFileDataFast(path: String, maxSize: Int? = nil) async throws -> Data {
         guard let device = selectedDevice else { throw ADBError.noDevice }
+
+        if let files = try companionFiles(for: device) {
+            return try await files.data(path, maxSize: maxSize)
+        }
 
         // Single quotes, not double: a double-quoted path still lets the
         // device shell expand $, ` and \, so a filename containing any
