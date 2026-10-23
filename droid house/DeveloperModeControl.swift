@@ -171,7 +171,7 @@ final class DeveloperModeController: ObservableObject {
 
     /// Brings adb back after switching debugging on over Wi-Fi: the fixed
     /// `adb tcpip` port if one is set (it lasts until reboot), or on Android
-    /// `adb tcpip` port before Android 11, or the Wireless debugging service
+    /// 11+ the Wireless debugging service adb finds over mDNS (only for a Mac
     /// adb finds over mDNS on 11+ (only for a Mac paired with it before).
     private func reconnectADB(host: String, adbPath: String) async {
         try? await Task.sleep(for: .seconds(2))
