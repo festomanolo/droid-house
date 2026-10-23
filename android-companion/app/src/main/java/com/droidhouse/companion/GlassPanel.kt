@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -71,6 +72,10 @@ fun GlassPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // pointerInput keeps its first gesture block until its key changes, so
+    // read the click through state or a recomposed lambda (a toggle's new
+    // direction, say) never reaches it.
+    val currentOnClick by rememberUpdatedState(onClick)
     val density = LocalDensity.current
     val phase = LocalAuroraPhase.current
 
@@ -128,7 +133,7 @@ fun GlassPanel(
                                 scope.launch { pressFactor.animateTo(0f, CompanionMotion.elastic()) }
                                 scope.launch { scale.animateTo(1f, CompanionMotion.elastic()) }
                             },
-                            onTap = { onClick() }
+                            onTap = { currentOnClick?.invoke() }
                         )
                     }
                 } else Modifier

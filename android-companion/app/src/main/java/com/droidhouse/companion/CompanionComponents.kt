@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,6 +82,10 @@ fun SpatialCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // pointerInput keeps its first gesture block until its key changes, so
+    // read the click through state or a recomposed lambda (a toggle's new
+    // direction, say) never reaches it.
+    val currentOnClick by rememberUpdatedState(onClick)
 
     // Entrance and press share ONE Animatable, so a press landing while the
     // entrance is still settling inherits its velocity instead of restarting.
@@ -116,7 +121,7 @@ fun SpatialCard(
                                 tryAwaitRelease()
                                 scope.launch { scale.animateTo(1f, CompanionMotion.elastic()) }
                             },
-                            onTap = { onClick() }
+                            onTap = { currentOnClick?.invoke() }
                         )
                     }
                 } else Modifier
@@ -198,6 +203,10 @@ fun SpatialButton(
     onClick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // pointerInput keeps its first gesture block until its key changes, so
+    // read the click through state or a recomposed lambda (a toggle's new
+    // direction, say) never reaches it.
+    val currentOnClick by rememberUpdatedState(onClick)
     val scale = remember { Animatable(1f) }
 
     val background by animateColorAsState(
@@ -236,7 +245,7 @@ fun SpatialButton(
                         tryAwaitRelease()
                         scope.launch { scale.animateTo(1f, CompanionMotion.elastic()) }
                     },
-                    onTap = { onClick() }
+                    onTap = { currentOnClick() }
                 )
             }
             .padding(horizontal = 14.dp),
@@ -265,6 +274,10 @@ fun QuickActionChip(
     onClick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // pointerInput keeps its first gesture block until its key changes, so
+    // read the click through state or a recomposed lambda (a toggle's new
+    // direction, say) never reaches it.
+    val currentOnClick by rememberUpdatedState(onClick)
     val scale = remember { Animatable(1f) }
     val iconScale = remember { Animatable(1f) }
     val pressFactor = remember { Animatable(0f) }
@@ -308,7 +321,7 @@ fun QuickActionChip(
                         scope.launch { scale.animateTo(1f, CompanionMotion.elastic()) }
                         scope.launch { iconScale.animateTo(1f, CompanionMotion.elastic()) }
                     },
-                    onTap = { onClick() }
+                    onTap = { currentOnClick() }
                 )
             },
         contentAlignment = Alignment.Center
