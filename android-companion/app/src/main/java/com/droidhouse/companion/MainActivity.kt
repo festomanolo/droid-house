@@ -575,6 +575,45 @@ private fun WifiCard(
     }
 }
 
+/**
+ * One switch for Developer options, USB debugging and Wireless debugging, so
+ * the phone can drop all three before a banking app checks for them.
+ */
+@Composable
+private fun DeveloperModeCard(state: CompanionUiState) {
+    val context = LocalContext.current
+    val dev = state.developer ?: return
+
+    GlassPanel(appearDelayMillis = 65) {
+        SectionLabel("Developer Mode")
+        HairlineDivider()
+        StatusRow("Developer options", if (dev.developerOptions) "On" else "Off", dev.developerOptions)
+        HairlineDivider()
+        StatusRow("USB debugging", if (dev.usbDebugging) "On" else "Off", dev.usbDebugging)
+        HairlineDivider()
+        StatusRow(
+            if (dev.wirelessSupported) "Wireless debugging" else "adb over Wi-Fi",
+            when {
+                dev.wirelessDebugging && dev.wirelessPort > 0 -> "On · ${dev.wirelessPort}"
+                dev.wirelessDebugging -> "On"
+                else -> "Off"
+            },
+            dev.wirelessDebugging
+        )
+
+        AnimatedVisibility(
+            visible = !dev.canToggle,
+            enter = fadeIn() + expandVertically(animationSpec = CompanionMotion.elastic()),
+            exit = fadeOut() + shrinkVertically(animationSpec = CompanionMotion.crisp())
+        ) {
+            Column {
+                HairlineDivider()
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "One-time setup: connect this phone to the Mac over adb and DroidHouse grants " +
+    }
+}
+
 @Composable
 private fun BridgeCard(state: CompanionUiState, onRestartService: () -> Unit) {
     GlassPanel(appearDelayMillis = 70) {
