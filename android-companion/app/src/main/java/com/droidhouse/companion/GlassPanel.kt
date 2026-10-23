@@ -74,6 +74,8 @@ fun GlassPanel(
     val scope = rememberCoroutineScope()
     // pointerInput keeps its first gesture block until its key changes, so
     // read the click through state or a recomposed lambda (a toggle's new
+    // direction, say) never reaches it.
+    val currentOnClick by rememberUpdatedState(onClick)
     val density = LocalDensity.current
     val phase = LocalAuroraPhase.current
 
