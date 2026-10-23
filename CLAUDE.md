@@ -135,6 +135,7 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - `GET /api/device/display`: returns `{width, height, inputReady}`.
   - `POST /api/input`: types are `tap`, `longpress`, `swipe`, `key`, `text` and `backspace`.
   - Returns 409 when the service is off.
+- Developer mode (`DeveloperMode.kt`, protocol 3, companion 2.3+):
 
 ### Mac app map (`droid house/`)
 - **Entry and shell:**
