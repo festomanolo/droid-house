@@ -160,3 +160,57 @@ object DeveloperMode {
                     delay(600)
                     setEnabled(context, false)
                 }
+            }
+        }
+    }
+
+    private fun global(context: Context, key: String): Int =
+        Settings.Global.getInt(context.contentResolver, key, 0)
+
+    /** `adb tcpip` sets this property; it lasts until reboot. */
+    private fun adbTcpPort(): Int = runCatching {
+        val process = ProcessBuilder("getprop", "service.adb.tcp.port").redirectErrorStream(true).start()
+        process.inputStream.bufferedReader().use { it.readText() }.trim().toIntOrNull() ?: 0
+    }.getOrDefault(0)
+}
+
+/** Quick Settings tile: one tap to drop developer mode before opening a banking app. */
+class DeveloperModeTileService : TileService() {
+
+    override fun onStartListening() {
+        super.onStartListening()
+        refresh()
+    }
+
+    override fun onClick() {
+        super.onClick()
+        if (!DeveloperMode.canToggle(this)) {
+            Toast.makeText(this, "Open DroidHouse to set up the developer mode switch", Toast.LENGTH_LONG).show()
+            return
+        }
+        val enabled = !DeveloperMode.isEnabled(this)
+        DeveloperMode.setEnabled(this, enabled).fold(
+            onSuccess = {
+                Toast.makeText(this, if (enabled) "Developer mode on" else "Developer mode off", Toast.LENGTH_SHORT).show()
+            },
+            onFailure = { Toast.makeText(this, it.message ?: "Couldn't switch developer mode", Toast.LENGTH_LONG).show() }
+        )
+        refresh()
+    }
+
+    private fun refresh() {
+        val tile = qsTile ?: return
+        val enabled = DeveloperMode.isEnabled(this)
+        tile.state = when {
+            !DeveloperMode.canToggle(this) -> Tile.STATE_UNAVAILABLE
+            enabled -> Tile.STATE_ACTIVE
+            else -> Tile.STATE_INACTIVE
+        }
+        tile.label = "Dev Mode"
+        tile.icon = Icon.createWithResource(this, R.drawable.droid)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            tile.subtitle = if (enabled) "On · debugging" else "Off"
+        }
+        tile.updateTile()
+    }
+}
