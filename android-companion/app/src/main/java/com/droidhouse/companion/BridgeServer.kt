@@ -48,9 +48,9 @@ class BridgeServer(
 
     companion object {
         private const val TAG = "BridgeServer"
-        /** 2 adds Wi-Fi pairing, the file API and remote input. */
-        const val PROTOCOL_VERSION = 2
-        const val VERSION = "2.2"
+        /** 2 adds Wi-Fi pairing, the file API and remote input; 3 adds the developer mode switch. */
+        const val PROTOCOL_VERSION = 3
+        const val VERSION = "2.3"
     }
 
     private val smsRepository = SmsRepository(appContext)
@@ -142,6 +142,7 @@ class BridgeServer(
 
                 FileBridge.install(this, appContext)
                 RemoteInputService.install(this, appContext)
+                DeveloperMode.install(this, appContext)
 
                 // ------------------------------------------------------ status
 

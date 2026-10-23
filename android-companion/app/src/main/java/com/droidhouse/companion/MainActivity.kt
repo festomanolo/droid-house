@@ -216,7 +216,8 @@ private data class CompanionUiState(
     val pairingCode: String = "",
     val pairedMacs: List<String> = emptyList(),
     val filesGranted: Boolean = false,
-    val remoteInputReady: Boolean = false
+    val remoteInputReady: Boolean = false,
+    val developer: DeveloperModePayload? = null
 ) {
     val allAccessGranted: Boolean
         get() = smsGranted && contactsGranted && audioGranted && notificationAccess
@@ -267,7 +268,8 @@ private fun CompanionScreen(
                 pairingCode = LanAccess.pairingCode,
                 pairedMacs = LanAccess.pairedMacs(),
                 filesGranted = FileBridge.hasStorageAccess(context),
-                remoteInputReady = RemoteInputService.isReady
+                remoteInputReady = RemoteInputService.isReady,
+                developer = DeveloperMode.snapshot(context)
             )
             delay(1000)
         }
@@ -300,6 +302,7 @@ private fun CompanionScreen(
             )
             StatsStrip(state)
             MacRemoteCard(onOpenRemote = onOpenRemote)
+            DeveloperModeCard(state)
             WifiCard(state, onSetWifiEnabled, onGrantFiles, onOpenAccessibility)
             BridgeCard(state, onRestartService)
             ClipboardCard(state, onCaptureClipboard)
@@ -569,6 +572,84 @@ private fun WifiCard(
             modifier = Modifier.fillMaxWidth(),
             onClick = { onSetWifiEnabled(!state.wifiEnabled) }
         )
+    }
+}
+
+/**
+ * One switch for Developer options, USB debugging and Wireless debugging, so
+ * the phone can drop all three before a banking app checks for them.
+ */
+@Composable
+private fun DeveloperModeCard(state: CompanionUiState) {
+    val context = LocalContext.current
+    val dev = state.developer ?: return
+
+    GlassPanel(appearDelayMillis = 65) {
+        SectionLabel("Developer Mode")
+        HairlineDivider()
+        StatusRow("Developer options", if (dev.developerOptions) "On" else "Off", dev.developerOptions)
+        HairlineDivider()
+        StatusRow("USB debugging", if (dev.usbDebugging) "On" else "Off", dev.usbDebugging)
+        HairlineDivider()
+        StatusRow(
+            if (dev.wirelessSupported) "Wireless debugging" else "adb over Wi-Fi",
+            when {
+                dev.wirelessDebugging && dev.wirelessPort > 0 -> "On · ${dev.wirelessPort}"
+                dev.wirelessDebugging -> "On"
+                else -> "Off"
+            },
+            dev.wirelessDebugging
+        )
+
+        AnimatedVisibility(
+            visible = !dev.canToggle,
+            enter = fadeIn() + expandVertically(animationSpec = CompanionMotion.elastic()),
+            exit = fadeOut() + shrinkVertically(animationSpec = CompanionMotion.crisp())
+        ) {
+            Column {
+                HairlineDivider()
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "One-time setup: connect this phone to the Mac over adb and DroidHouse grants " +
+                        "itself the permission. Or run this from a computer:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = dev.grantCommand,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        if (dev.canToggle) {
+            SpatialButton(
+                text = if (dev.developerOptions) "Turn Off Developer Mode" else "Turn On Developer Mode",
+                prominent = !dev.developerOptions,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val enabled = !dev.developerOptions
+                DeveloperMode.setEnabled(context, enabled).onFailure {
+                    Toast.makeText(context, it.message ?: "Couldn't switch developer mode", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SpatialButton(text = "Copy Command", modifier = Modifier.weight(1f)) {
+                    DeveloperMode.copyGrantCommand(context)
+                    Toast.makeText(context, "Command copied", Toast.LENGTH_SHORT).show()
+                }
+                SpatialButton(
+                    text = "Open Settings",
+                    prominent = false,
+                    modifier = Modifier.weight(1f)
+                ) { DeveloperMode.openSettings(context) }
+            }
+        }
     }
 }
 
