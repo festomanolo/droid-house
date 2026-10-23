@@ -85,7 +85,7 @@ object DeveloperMode {
         return DeveloperModePayload(
             developerOptions = isEnabled(context),
             usbDebugging = usb,
-            wirelessDebugging = if (wirelessSupported) global(context, ADB_WIFI_ENABLED) == 1 else usb && tcpPort > 0,
+            wirelessDebugging = wifiSwitch || (usb && tcpPort > 0),
             wirelessPort = if (usb) tcpPort else 0,
             wirelessSupported = wirelessSupported,
             canToggle = canToggle(context),
