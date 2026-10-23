@@ -205,3 +205,23 @@ struct DeveloperModeCard: View {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .fill((isOn ? Color.orange : Color.secondary).gradient)
                         .frame(width: 26, height: 26)
+                    Image(systemName: "hammer.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Developer Mode")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 4)
+                if controller.isBusy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Toggle("", isOn: Binding(get: { isOn }, set: { request($0) }))
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .labelsHidden()
