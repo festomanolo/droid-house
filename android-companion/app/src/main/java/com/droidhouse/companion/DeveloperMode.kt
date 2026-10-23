@@ -33,7 +33,7 @@ data class DeveloperModePayload(
     val developerOptions: Boolean,
     val usbDebugging: Boolean,
     val wirelessDebugging: Boolean,
-    /** Port adbd listens on over Wi-Fi when known (`adb tcpip` before Android 11), else 0. */
+    /** Fixed port adbd listens on over Wi-Fi after `adb tcpip`, else 0. */
     val wirelessPort: Int,
     /** Android 11+ has a real Wireless debugging switch; older releases only have `adb tcpip`. */
     val wirelessSupported: Boolean,
