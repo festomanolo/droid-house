@@ -81,7 +81,7 @@ object DeveloperMode {
         val usb = global(context, Settings.Global.ADB_ENABLED) == 1
         // `adb tcpip` works on every release, alongside Wireless debugging.
         val tcpPort = adbTcpPort()
-        val tcpPort = if (wirelessSupported) 0 else adbTcpPort()
+        val wifiSwitch = wirelessSupported && global(context, ADB_WIFI_ENABLED) == 1
         return DeveloperModePayload(
             developerOptions = isEnabled(context),
             usbDebugging = usb,
