@@ -80,3 +80,24 @@ final class DeveloperModeController: ObservableObject {
             return
         }
 
+        if enabled {
+            if device.isCompanionOnly, let host {
+                await reconnectADB(host: host, adbPath: adbPath)
+                await adbService.detectDevices()
+            }
+        } else if !device.isCompanionOnly {
+            message = WiFiCompanionStore.shared.paired.isEmpty
+                ? "Debugging is off, so adb disconnects. Pair over Wi-Fi to turn it back on from the Mac."
+                : "Debugging is off. Pick the phone's Wi-Fi entry to turn it back on."
+        }
+    }
+
+    // MARK: Bridge
+
+    private func endpoint(for device: ADBDevice) -> CompanionEndpoint? {
+        device.isCompanionOnly ? CompanionLink.wifiEndpoint(for: device.id) : .loopback
+    }
+
+    private func fetch(device: ADBDevice) async -> DeveloperModeState? {
+        guard let request = endpoint(for: device)?.request("/api/device/developer", timeout: 5),
+              let (data, response) = try? await URLSession.shared.data(for: request),
