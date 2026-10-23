@@ -70,6 +70,10 @@ struct SidebarView: View {
                         Task { await adbService.listFiles(path: "/sdcard") }
                     }
                 }
+
+                if let selectedDevice {
+                    DeveloperModeCard(device: selectedDevice, adbService: adbService)
+                }
             }
         }
     }
