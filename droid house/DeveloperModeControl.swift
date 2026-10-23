@@ -101,3 +101,24 @@ final class DeveloperModeController: ObservableObject {
     private func fetch(device: ADBDevice) async -> DeveloperModeState? {
         guard let request = endpoint(for: device)?.request("/api/device/developer", timeout: 5),
               let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONDecoder().decode(DeveloperModeState.self, from: data)
+    }
+
+    /// Nil when the bridge is unreachable or predates the endpoint (404).
+    private func post(_ enabled: Bool, device: ADBDevice) async throws -> DeveloperModeState? {
+        guard var request = endpoint(for: device)?.request("/api/device/developer", method: "POST", timeout: 10) else { return nil }
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(#"{"enabled":\#(enabled)}"#.utf8)
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let status = (response as? HTTPURLResponse)?.statusCode else { return nil }
+        switch status {
+        case 200:
+            return try JSONDecoder().decode(DeveloperModeState.self, from: data)
+        case 404:
+            return nil
+        case 409 where !device.isCompanionOnly:
+            // Not granted yet and the shell can do it directly.
+            return nil
+        default:
