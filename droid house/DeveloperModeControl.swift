@@ -122,3 +122,24 @@ final class DeveloperModeController: ObservableObject {
             // Not granted yet and the shell can do it directly.
             return nil
         default:
+            struct Reply: Decodable { let message: String }
+            let text = (try? JSONDecoder().decode(Reply.self, from: data))?.message
+            throw ADBError.commandFailed(text ?? "The phone answered \(status).")
+        }
+    }
+
+    // MARK: adb
+
+    private func grant(serial: String, adbPath: String) async -> Bool {
+        granted.insert(serial)
+        let output = try? await ADBProcess.run(
+            adb: adbPath,
+            arguments: ["-s", serial, "shell", "pm grant \(Self.companionPackage) android.permission.WRITE_SECURE_SETTINGS"],
+            timeout: 10
+        )
+        return output?.status == 0
+    }
+
+    private func shellState(serial: String, adbPath: String) async -> DeveloperModeState? {
+        let command = "settings get global development_settings_enabled; settings get global adb_enabled; " +
+            "settings get global adb_wifi_enabled; getprop service.adb.tcp.port; getprop ro.build.version.sdk"
