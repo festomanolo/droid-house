@@ -246,3 +246,24 @@ struct DeveloperModeCard: View {
         .task(id: device.id) {
             controller.message = nil
             while !Task.isCancelled {
+                await controller.refresh(device: device, adbPath: adbService.adbPath)
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+        .confirmationDialog("Turn off developer mode?", isPresented: $confirmingOff) {
+            Button("Turn Off") { apply(false) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("USB and wireless debugging go off too, so adb disconnects. With the phone paired over Wi-Fi you can turn it back on from here.")
+        }
+    }
+
+    private var isOn: Bool { controller.state?.developerOptions ?? false }
+
+    private var canToggle: Bool {
+        guard let state = controller.state else { return false }
+        return state.canToggle || !device.isCompanionOnly
+    }
+
+    private var subtitle: String {
+        guard let state = controller.state else { return "Unavailable — update the phone app" }
