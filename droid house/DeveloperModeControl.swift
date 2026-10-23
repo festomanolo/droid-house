@@ -225,3 +225,24 @@ struct DeveloperModeCard: View {
                         .toggleStyle(.switch)
                         .controlSize(.small)
                         .labelsHidden()
+                        .disabled(!canToggle)
+                }
+            }
+
+            if let message = controller.message {
+                Text(message)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.primary.opacity(0.06), lineWidth: 1))
+        )
+        .help("Turns Developer options, USB debugging and Wireless debugging on or off together")
+        .task(id: device.id) {
+            controller.message = nil
+            while !Task.isCancelled {
