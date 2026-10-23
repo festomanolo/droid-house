@@ -121,7 +121,7 @@ fun SpatialCard(
                                 tryAwaitRelease()
                                 scope.launch { scale.animateTo(1f, CompanionMotion.elastic()) }
                             },
-                            onTap = { onClick() }
+                            onTap = { currentOnClick?.invoke() }
                         )
                     }
                 } else Modifier
