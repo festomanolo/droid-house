@@ -274,6 +274,8 @@ fun QuickActionChip(
     onClick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // pointerInput keeps its first gesture block until its key changes, so
+    // read the click through state or a recomposed lambda (a toggle's new
     val scale = remember { Animatable(1f) }
     val iconScale = remember { Animatable(1f) }
     val pressFactor = remember { Animatable(0f) }
