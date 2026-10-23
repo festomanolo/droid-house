@@ -184,3 +184,24 @@ final class DeveloperModeController: ObservableObject {
             }
         }
         for target in targets {
+            if let output = try? await ADBProcess.run(adb: adbPath, arguments: ["connect", target], timeout: 8),
+               output.stdoutString.contains("connected") { return }
+        }
+    }
+}
+
+// MARK: - Sidebar card
+
+struct DeveloperModeCard: View {
+    let device: ADBDevice
+    @ObservedObject var adbService: ADBService
+    @StateObject private var controller = DeveloperModeController()
+    @State private var confirmingOff = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill((isOn ? Color.orange : Color.secondary).gradient)
+                        .frame(width: 26, height: 26)
