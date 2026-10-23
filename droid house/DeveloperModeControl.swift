@@ -143,3 +143,23 @@ final class DeveloperModeController: ObservableObject {
     private func shellState(serial: String, adbPath: String) async -> DeveloperModeState? {
         let command = "settings get global development_settings_enabled; settings get global adb_enabled; " +
             "settings get global adb_wifi_enabled; getprop service.adb.tcp.port; getprop ro.build.version.sdk"
+        guard let output = try? await ADBProcess.run(adb: adbPath, arguments: ["-s", serial, "shell", command], timeout: 8),
+              output.status == 0 else { return nil }
+        let lines = output.stdoutString.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard lines.count >= 5 else { return nil }
+        let wirelessSupported = (Int(lines[4]) ?? 0) >= 30
+        let tcpPort = Int(lines[3]) ?? 0
+        return DeveloperModeState(
+            developerOptions: lines[0] == "1",
+            usbDebugging: lines[1] == "1",
+            wirelessDebugging: wirelessSupported ? lines[2] == "1" : tcpPort > 0,
+            wirelessPort: wirelessSupported ? 0 : tcpPort,
+            wirelessSupported: wirelessSupported,
+            canToggle: true,
+            grantCommand: ""
+        )
+    }
+
+    private func shellSet(_ enabled: Bool, serial: String, adbPath: String) async throws {
+        // adb_enabled goes last when switching off: it ends this very session.
+        let command = enabled
