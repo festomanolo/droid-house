@@ -268,7 +268,8 @@ private fun CompanionScreen(
                 pairingCode = LanAccess.pairingCode,
                 pairedMacs = LanAccess.pairedMacs(),
                 filesGranted = FileBridge.hasStorageAccess(context),
-                remoteInputReady = RemoteInputService.isReady
+                remoteInputReady = RemoteInputService.isReady,
+                developer = DeveloperMode.snapshot(context)
             )
             delay(1000)
         }
