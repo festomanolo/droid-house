@@ -245,7 +245,7 @@ fun SpatialButton(
                         tryAwaitRelease()
                         scope.launch { scale.animateTo(1f, CompanionMotion.elastic()) }
                     },
-                    onTap = { onClick() }
+                    onTap = { currentOnClick() }
                 )
             }
             .padding(horizontal = 14.dp),
