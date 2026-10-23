@@ -60,3 +60,23 @@ final class DeveloperModeController: ObservableObject {
     func setEnabled(_ enabled: Bool, device: ADBDevice, adbService: ADBService) async {
         isBusy = true
         defer { isBusy = false }
+        message = nil
+
+        let adbPath = adbService.adbPath
+        let host = endpoint(for: device)?.host
+
+        do {
+            if let result = try await post(enabled, device: device) {
+                state = result
+            } else if !device.isCompanionOnly {
+                try await shellSet(enabled, serial: device.id, adbPath: adbPath)
+                state = await shellState(serial: device.id, adbPath: adbPath)
+            } else {
+                message = "Couldn't reach the DroidHouse app on the phone."
+                return
+            }
+        } catch {
+            message = error.localizedDescription
+            return
+        }
+
