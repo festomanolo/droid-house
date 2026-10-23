@@ -39,3 +39,24 @@ final class DeveloperModeController: ObservableObject {
     // MARK: Reading
 
     func refresh(device: ADBDevice, adbPath: String) async {
+        guard !isBusy else { return }
+        if let fetched = await fetch(device: device) {
+            // The grant is what lets every later toggle work without adb.
+            if !fetched.canToggle, !device.isCompanionOnly, !granted.contains(device.id),
+               await grant(serial: device.id, adbPath: adbPath) {
+                state = await fetch(device: device) ?? fetched
+            } else {
+                state = fetched
+            }
+        } else if !device.isCompanionOnly {
+            state = await shellState(serial: device.id, adbPath: adbPath)
+        } else {
+            state = nil
+        }
+    }
+
+    // MARK: Switching
+
+    func setEnabled(_ enabled: Bool, device: ADBDevice, adbService: ADBService) async {
+        isBusy = true
+        defer { isBusy = false }
