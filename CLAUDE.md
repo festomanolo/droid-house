@@ -137,6 +137,7 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - Returns 409 when the service is off.
 - Developer mode (`DeveloperMode.kt`, protocol 3, companion 2.3+):
   - `GET /api/device/developer`: developer options, USB and wireless debugging, the `adb tcpip` port, and `canToggle`.
+  - `POST /api/device/developer {enabled}`: flips all three together. Returns 409 until WRITE_SECURE_SETTINGS is granted. Only adb can grant it (`pm grant`); the Mac grants it automatically when it sees the phone over adb. The grant survives `install -r` and switching developer mode off. When switching off, the endpoint replies first and applies the change 600 ms later, because it may be cutting off the adb tunnel the reply travels on.
 
 ### Mac app map (`droid house/`)
 - **Entry and shell:**
