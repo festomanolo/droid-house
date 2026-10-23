@@ -267,3 +267,24 @@ struct DeveloperModeCard: View {
 
     private var subtitle: String {
         guard let state = controller.state else { return "Unavailable — update the phone app" }
+        if !canToggle { return "Connect over adb once to enable" }
+        guard state.developerOptions else { return "Off" }
+        var parts: [String] = []
+        if state.usbDebugging { parts.append("USB") }
+        if state.wirelessDebugging { parts.append(state.wirelessPort > 0 ? "Wi-Fi :\(state.wirelessPort)" : "Wireless") }
+        return parts.isEmpty ? "On" : "On · " + parts.joined(separator: " + ") + " debugging"
+    }
+
+    private func request(_ enabled: Bool) {
+        // Over adb, switching off cuts the Mac off from the phone; confirm it.
+        if !enabled && !device.isCompanionOnly {
+            confirmingOff = true
+        } else {
+            apply(enabled)
+        }
+    }
+
+    private func apply(_ enabled: Bool) {
+        Task { await controller.setEnabled(enabled, device: device, adbService: adbService) }
+    }
+}
