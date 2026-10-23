@@ -133,7 +133,7 @@ fun GlassPanel(
                                 scope.launch { pressFactor.animateTo(0f, CompanionMotion.elastic()) }
                                 scope.launch { scale.animateTo(1f, CompanionMotion.elastic()) }
                             },
-                            onTap = { onClick() }
+                            onTap = { currentOnClick?.invoke() }
                         )
                     }
                 } else Modifier
