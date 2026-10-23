@@ -163,3 +163,24 @@ final class DeveloperModeController: ObservableObject {
     private func shellSet(_ enabled: Bool, serial: String, adbPath: String) async throws {
         // adb_enabled goes last when switching off: it ends this very session.
         let command = enabled
+            ? "settings put global development_settings_enabled 1; settings put global adb_enabled 1; settings put global adb_wifi_enabled 1"
+            : "settings put global adb_wifi_enabled 0; settings put global development_settings_enabled 0; settings put global adb_enabled 0"
+        let output = try await ADBProcess.run(adb: adbPath, arguments: ["-s", serial, "shell", command], timeout: 10)
+        if enabled, output.status != 0 { throw ADBError.commandFailed(output.errorText) }
+    }
+
+    /// Brings adb back after switching debugging on over Wi-Fi: the fixed
+    /// `adb tcpip` port before Android 11, or the Wireless debugging service
+    /// adb finds over mDNS on 11+ (only for a Mac paired with it before).
+    private func reconnectADB(host: String, adbPath: String) async {
+        try? await Task.sleep(for: .seconds(2))
+        var targets: [String] = []
+        if let port = state?.wirelessPort, port > 0 { targets.append("\(host):\(port)") }
+        if state?.wirelessSupported == true,
+           let output = try? await ADBProcess.run(adb: adbPath, arguments: ["mdns", "services"], timeout: 6) {
+            for line in output.stdoutString.split(whereSeparator: \.isNewline)
+            where line.contains("_adb-tls-connect") && line.contains(host) {
+                if let address = line.split(whereSeparator: \.isWhitespace).last { targets.append(String(address)) }
+            }
+        }
+        for target in targets {
