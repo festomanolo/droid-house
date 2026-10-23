@@ -302,6 +302,7 @@ private fun CompanionScreen(
             )
             StatsStrip(state)
             MacRemoteCard(onOpenRemote = onOpenRemote)
+            DeveloperModeCard(state)
             WifiCard(state, onSetWifiEnabled, onGrantFiles, onOpenAccessibility)
             BridgeCard(state, onRestartService)
             ClipboardCard(state, onCaptureClipboard)
