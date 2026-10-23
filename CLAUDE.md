@@ -188,6 +188,6 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - Use `CompanionLink`/`CompanionEndpoint` on the Mac.
   - Keep loopback trust plus bearer auth on the phone.
   - Don't add adb-only code paths without a Wi-Fi branch, unless the feature truly needs a shell.
-- When adding endpoints, bump `PROTOCOL_VERSION` (currently 2) and `VERSION` in `BridgeServer.kt` if older Macs or phones need to detect the change.
+- When adding endpoints, bump `PROTOCOL_VERSION` (currently 3) and `VERSION` in `BridgeServer.kt` if older Macs or phones need to detect the change.
 - `ISSUES.md` is the engineering issue log, numbered `[Issue #NNN]`. Add an entry for significant bugs.
 - `README.md` is the public, marketing-style readme. Its version badges and links point at public releases.
