@@ -84,6 +84,8 @@ fun SpatialCard(
     val scope = rememberCoroutineScope()
     // pointerInput keeps its first gesture block until its key changes, so
     // read the click through state or a recomposed lambda (a toggle's new
+    // direction, say) never reaches it.
+    val currentOnClick by rememberUpdatedState(onClick)
 
     // Entrance and press share ONE Animatable, so a press landing while the
     // entrance is still settling inherits its velocity instead of restarting.
