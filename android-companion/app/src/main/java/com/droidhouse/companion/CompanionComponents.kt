@@ -321,7 +321,7 @@ fun QuickActionChip(
                         scope.launch { scale.animateTo(1f, CompanionMotion.elastic()) }
                         scope.launch { iconScale.animateTo(1f, CompanionMotion.elastic()) }
                     },
-                    onTap = { onClick() }
+                    onTap = { currentOnClick() }
                 )
             },
         contentAlignment = Alignment.Center
