@@ -611,6 +611,45 @@ private fun DeveloperModeCard(state: CompanionUiState) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "One-time setup: connect this phone to the Mac over adb and DroidHouse grants " +
+                        "itself the permission. Or run this from a computer:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = dev.grantCommand,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        if (dev.canToggle) {
+            SpatialButton(
+                text = if (dev.developerOptions) "Turn Off Developer Mode" else "Turn On Developer Mode",
+                prominent = !dev.developerOptions,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val enabled = !dev.developerOptions
+                DeveloperMode.setEnabled(context, enabled).onFailure {
+                    Toast.makeText(context, it.message ?: "Couldn't switch developer mode", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SpatialButton(text = "Copy Command", modifier = Modifier.weight(1f)) {
+                    DeveloperMode.copyGrantCommand(context)
+                    Toast.makeText(context, "Command copied", Toast.LENGTH_SHORT).show()
+                }
+                SpatialButton(
+                    text = "Open Settings",
+                    prominent = false,
+                    modifier = Modifier.weight(1f)
+                ) { DeveloperMode.openSettings(context) }
+            }
+        }
     }
 }
 
