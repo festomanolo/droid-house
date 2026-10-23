@@ -106,3 +106,57 @@ object DeveloperMode {
             // fine, USB debugging is still on.
             if (wirelessSupported) Settings.Global.putInt(resolver, ADB_WIFI_ENABLED, 1)
         } else {
+            if (wirelessSupported) Settings.Global.putInt(resolver, ADB_WIFI_ENABLED, value)
+            Settings.Global.putInt(resolver, Settings.Global.ADB_ENABLED, value)
+            Settings.Global.putInt(resolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, value)
+        }
+        Log.i(TAG, "Developer mode ${if (enabled) "on" else "off"}")
+        Unit
+    }.onFailure { Log.w(TAG, "Couldn't switch developer mode", it) }
+
+    fun openSettings(context: Context) {
+        val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }
+            .onFailure {
+                context.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+    }
+
+    fun copyGrantCommand(context: Context) {
+        context.getSystemService(ClipboardManager::class.java)
+            ?.setPrimaryClip(ClipData.newPlainText("adb grant", GRANT_COMMAND))
+    }
+
+    fun install(route: Route, context: Context) = with(route) {
+        get("/api/device/developer") {
+            call.respond(snapshot(context))
+        }
+
+        post("/api/device/developer") {
+            val request = runCatching { call.receive<DeveloperModeRequest>() }.getOrNull()
+            if (request == null) {
+                call.respond(HttpStatusCode.BadRequest, SimpleResult(false, "Body must be {\"enabled\": true|false}"))
+                return@post
+            }
+            if (!canToggle(context)) {
+                call.respond(
+                    HttpStatusCode.Conflict,
+                    SimpleResult(false, "Connect the phone over adb once so the Mac can grant DroidHouse permission to change developer settings.")
+                )
+                return@post
+            }
+
+            if (request.enabled) {
+                setEnabled(context, true).fold(
+                    onSuccess = { call.respond(snapshot(context)) },
+                    onFailure = { call.respond(HttpStatusCode.InternalServerError, SimpleResult(false, it.message ?: "Failed")) }
+                )
+            } else {
+                // Over the adb tunnel, turning USB debugging off kills the
+                // connection this reply travels on, so answer first.
+                call.respond(snapshot(context).copy(developerOptions = false, usbDebugging = false, wirelessDebugging = false, wirelessPort = 0))
+                scope.launch {
+                    delay(600)
+                    setEnabled(context, false)
+                }
