@@ -142,6 +142,7 @@ class BridgeServer(
 
                 FileBridge.install(this, appContext)
                 RemoteInputService.install(this, appContext)
+                DeveloperMode.install(this, appContext)
 
                 // ------------------------------------------------------ status
 
