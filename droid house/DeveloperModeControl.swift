@@ -152,7 +152,7 @@ final class DeveloperModeController: ObservableObject {
         return DeveloperModeState(
             developerOptions: lines[0] == "1",
             usbDebugging: lines[1] == "1",
-            wirelessDebugging: wirelessSupported ? lines[2] == "1" : tcpPort > 0,
+            wirelessDebugging: (wirelessSupported && lines[2] == "1") || tcpPort > 0,
             wirelessPort: wirelessSupported ? 0 : tcpPort,
             wirelessSupported: wirelessSupported,
             canToggle: true,
