@@ -82,6 +82,7 @@ fun SpatialCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // pointerInput keeps its first gesture block until its key changes, so
 
     // Entrance and press share ONE Animatable, so a press landing while the
     // entrance is still settling inherits its velocity instead of restarting.
