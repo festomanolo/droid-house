@@ -18,3 +18,24 @@ import SwiftUI
 nonisolated struct DeveloperModeState: Decodable, Equatable, Sendable {
     let developerOptions: Bool
     let usbDebugging: Bool
+    let wirelessDebugging: Bool
+    let wirelessPort: Int
+    let wirelessSupported: Bool
+    let canToggle: Bool
+    let grantCommand: String
+}
+
+@MainActor
+final class DeveloperModeController: ObservableObject {
+    static let companionPackage = "com.droidhouse.companion"
+
+    @Published private(set) var state: DeveloperModeState?
+    @Published private(set) var isBusy = false
+    @Published var message: String?
+
+    /// adb serials already granted this session, so the grant runs once each.
+    private var granted: Set<String> = []
+
+    // MARK: Reading
+
+    func refresh(device: ADBDevice, adbPath: String) async {
