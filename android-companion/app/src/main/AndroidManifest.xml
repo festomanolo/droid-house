@@ -42,6 +42,11 @@
         android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
+    <!-- Developer mode switch. Not grantable from the UI: adb grants it once
+         (`pm grant … WRITE_SECURE_SETTINGS`), which the Mac does automatically. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
