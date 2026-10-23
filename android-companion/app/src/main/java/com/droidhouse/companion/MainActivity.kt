@@ -216,7 +216,8 @@ private data class CompanionUiState(
     val pairingCode: String = "",
     val pairedMacs: List<String> = emptyList(),
     val filesGranted: Boolean = false,
-    val remoteInputReady: Boolean = false
+    val remoteInputReady: Boolean = false,
+    val developer: DeveloperModePayload? = null
 ) {
     val allAccessGranted: Boolean
         get() = smsGranted && contactsGranted && audioGranted && notificationAccess
