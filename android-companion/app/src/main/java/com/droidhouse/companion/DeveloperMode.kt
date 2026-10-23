@@ -33,7 +33,7 @@ data class DeveloperModePayload(
     val developerOptions: Boolean,
     val usbDebugging: Boolean,
     val wirelessDebugging: Boolean,
-    /** Port adbd listens on over Wi-Fi when known (`adb tcpip` before Android 11), else 0. */
+    /** Fixed port adbd listens on over Wi-Fi after `adb tcpip`, else 0. */
     val wirelessPort: Int,
     /** Android 11+ has a real Wireless debugging switch; older releases only have `adb tcpip`. */
     val wirelessSupported: Boolean,
@@ -79,11 +79,13 @@ object DeveloperMode {
 
     fun snapshot(context: Context): DeveloperModePayload {
         val usb = global(context, Settings.Global.ADB_ENABLED) == 1
-        val tcpPort = if (wirelessSupported) 0 else adbTcpPort()
+        // `adb tcpip` works on every release, alongside Wireless debugging.
+        val tcpPort = adbTcpPort()
+        val wifiSwitch = wirelessSupported && global(context, ADB_WIFI_ENABLED) == 1
         return DeveloperModePayload(
             developerOptions = isEnabled(context),
             usbDebugging = usb,
-            wirelessDebugging = if (wirelessSupported) global(context, ADB_WIFI_ENABLED) == 1 else usb && tcpPort > 0,
+            wirelessDebugging = wifiSwitch || (usb && tcpPort > 0),
             wirelessPort = if (usb) tcpPort else 0,
             wirelessSupported = wirelessSupported,
             canToggle = canToggle(context),

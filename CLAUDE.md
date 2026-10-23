@@ -57,7 +57,7 @@ Author: Nolo (@festomanolo, festomanolofm@gmail.com). The project is proprietary
   - `compileSdk`/`targetSdk` 35, `minSdk` 28 (Android 9).
   - Guard any API ≥ 29 call with `Build.VERSION.SDK_INT` or `@RequiresApi`, then run lint.
   - Example: AeroCast audio needs Q+, so Android 9 casts video only.
-- Versions are `versionCode 4` and `versionName "2.2"`, in `app/build.gradle.kts`.
+- Versions are `versionCode 5` and `versionName "2.3"`, in `app/build.gradle.kts`.
 - Lint: `./gradlew lintDebug`. Run it online. It already fails with errors that existed before the Wi-Fi work: MissingPermission in `StudioStreamService.openCamera`, StartActivityAndCollapseDeprecated, and ChromeOS telephony. Don't add new errors.
 - Dependencies: Ktor 2.3.12 (server-core, CIO, content-negotiation, cors, status-pages, kotlinx-json), kotlinx-serialization 1.7.3, coroutines 1.8.1, OkHttp 4.12, Compose BOM 2024.09.03.
 
@@ -135,6 +135,10 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - `GET /api/device/display`: returns `{width, height, inputReady}`.
   - `POST /api/input`: types are `tap`, `longpress`, `swipe`, `key`, `text` and `backspace`.
   - Returns 409 when the service is off.
+- Developer mode (`DeveloperMode.kt`, protocol 3, companion 2.3+):
+  - `GET /api/device/developer`: developer options, USB and wireless debugging, the `adb tcpip` port, and `canToggle`.
+  - `POST /api/device/developer {enabled}`: flips all three together. Returns 409 until WRITE_SECURE_SETTINGS is granted. Only adb can grant it (`pm grant`); the Mac grants it automatically when it sees the phone over adb. The grant survives `install -r` and switching developer mode off. When switching off, the endpoint replies first and applies the change 600 ms later, because it may be cutting off the adb tunnel the reply travels on.
+  - Quick Settings tile: `DeveloperModeTileService`. Mac UI: `DeveloperModeControl.swift` (sidebar card under the selected device). If the bridge is down, the Mac falls back to `settings put` over adb shell.
 
 ### Mac app map (`droid house/`)
 - **Entry and shell:**
@@ -184,6 +188,6 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - Use `CompanionLink`/`CompanionEndpoint` on the Mac.
   - Keep loopback trust plus bearer auth on the phone.
   - Don't add adb-only code paths without a Wi-Fi branch, unless the feature truly needs a shell.
-- When adding endpoints, bump `PROTOCOL_VERSION` (currently 2) and `VERSION` in `BridgeServer.kt` if older Macs or phones need to detect the change.
+- When adding endpoints, bump `PROTOCOL_VERSION` (currently 3) and `VERSION` in `BridgeServer.kt` if older Macs or phones need to detect the change.
 - `ISSUES.md` is the engineering issue log, numbered `[Issue #NNN]`. Add an entry for significant bugs.
 - `README.md` is the public, marketing-style readme. Its version badges and links point at public releases.
