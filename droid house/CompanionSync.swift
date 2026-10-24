@@ -686,23 +686,6 @@ final class CompanionSync: ObservableObject {
         return data
     }
 
-    // MARK: - Roster
-
-    /// Pulls a raw provider table. Rows come back exactly as the cursor
-    /// produced them — no grouping, no de-duplication.
-    func fetchRoster(table: String) async throws -> RosterResponse? {
-        guard isConnected,
-              let url = URL(string: "\(baseURL)/api/roster/\(table)") else { return nil }
-
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 45
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-
-        let (data, response) = try await CompanionLink.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-        return try decoder.decode(RosterResponse.self, from: data)
-    }
-
     // MARK: - AeroCast
 
     func aeroCastStatus() async -> Bool {
