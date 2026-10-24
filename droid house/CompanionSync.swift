@@ -132,13 +132,6 @@ final class CompanionSync: ObservableObject {
         let lastFromSelf: Bool?
     }
 
-    struct RosterResponse: Decodable {
-        let name: String
-        let columns: [String]
-        let rows: [[String]]
-        let truncated: Bool
-    }
-
     // MARK: - Connection
 
     /// Points the bridge client at a device: adb forward for adb serials, the
