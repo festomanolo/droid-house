@@ -708,6 +708,12 @@ private fun ClipboardCard(state: CompanionUiState, onCaptureClipboard: () -> Boo
         SectionLabel("Clipboard")
         HairlineDivider()
         StatusRow(
+            label = "Sync to Mac",
+            value = if (state.clipboardAutomatic) "Automatic" else "Manual",
+            isGood = state.clipboardAutomatic
+        )
+        HairlineDivider()
+        StatusRow(
             label = "Captured via",
             value = state.clipboardSource,
             isGood = state.clipboardSource != "none"
