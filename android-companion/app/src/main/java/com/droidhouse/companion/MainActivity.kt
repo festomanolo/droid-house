@@ -208,6 +208,7 @@ private data class CompanionUiState(
     val sentCount: Int = 0,
     val clipboardPreview: String = "",
     val clipboardSource: String = "none",
+    val clipboardAutomatic: Boolean = false,
     val aeroCastStreaming: Boolean = false,
     val aeroCastMessage: String = "Idle",
     val aeroCastSize: String = "",
