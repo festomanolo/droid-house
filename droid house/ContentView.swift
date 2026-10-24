@@ -197,7 +197,7 @@ struct ContentView: View {
         .tint(colorFromName(appThemeColor))
     }
 
-    /// AeroCast, Roster and Transfers render edge-to-edge, so the inspector is
+    /// AeroCast, Studio and Transfers render edge-to-edge, so the inspector is
     /// suppressed for them regardless of the user's toggle — which is restored
     /// intact the moment they navigate back to a pane that uses it.
     private var inspectorPresented: Binding<Bool> {
@@ -235,8 +235,6 @@ struct ContentView: View {
                     StudioCamView(adbService: adbService)
                 case .macRemote:
                     MacRemoteAccessView()
-                case .roster:
-                    RosterView(adbService: adbService)
                 case .clipboard:
                     ClipboardSyncView()
                 case .screenshots:
@@ -251,7 +249,7 @@ struct ContentView: View {
                 switch selectedSection {
                 case .messages:
                     ContactsSidebarView(selectedContact: $selectedContact)
-                case .aeroCast, .studioInput, .roster, .transfers, .macRemote:
+                case .aeroCast, .studioInput, .transfers, .macRemote:
                     // These panes own their full canvas; the inspector would
                     // only steal width from them.
                     EmptyView()

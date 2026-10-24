@@ -132,13 +132,6 @@ final class CompanionSync: ObservableObject {
         let lastFromSelf: Bool?
     }
 
-    struct RosterResponse: Decodable {
-        let name: String
-        let columns: [String]
-        let rows: [[String]]
-        let truncated: Bool
-    }
-
     // MARK: - Connection
 
     /// Points the bridge client at a device: adb forward for adb serials, the
@@ -167,7 +160,7 @@ final class CompanionSync: ObservableObject {
         wifiDeviceID = nil
         CompanionLink.endpoint = .loopback
         // Always make sure the poll loop is alive, even on a repeat call — it
-        // is what keeps `isConnected` (and therefore clipboard, roster and
+        // is what keeps `isConnected` (and therefore clipboard and
         // messaging) truthful after a transient drop.
         startPolling()
 
@@ -691,23 +684,6 @@ final class CompanionSync: ObservableObject {
               !data.isEmpty else { return nil }
 
         return data
-    }
-
-    // MARK: - Roster
-
-    /// Pulls a raw provider table. Rows come back exactly as the cursor
-    /// produced them — no grouping, no de-duplication.
-    func fetchRoster(table: String) async throws -> RosterResponse? {
-        guard isConnected,
-              let url = URL(string: "\(baseURL)/api/roster/\(table)") else { return nil }
-
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 45
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-
-        let (data, response) = try await CompanionLink.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-        return try decoder.decode(RosterResponse.self, from: data)
     }
 
     // MARK: - AeroCast

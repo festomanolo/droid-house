@@ -119,7 +119,7 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - `GET /api/screenshots`, `GET /api/screenshots/file`.
   - Code: `ScreenshotWatcher.kt`.
 - Roster:
-  - `GET /api/roster/{table}`.
+  - `GET /api/roster/{table}`. Unused: the Mac's "Smart Sync" screen that called it was removed in 1.7.
 - AeroCast:
   - `/api/aerocast/{start,stop,status}`.
   - Code: `AeroCastConsentActivity.kt` handles MediaProjection consent.
@@ -172,7 +172,6 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
     - `StudioVirtualCamManager` is the CoreMediaIO webcam.
   - Messages: `MessagesView`, `ChatBubble`, `ContactsSidebarView`, `ReplyTag`, `SmartReplyEngine`. Replies from macOS notifications go through `PhoneNotificationRelay`, which logs to subsystem `manolo.droid-house`, category `notifications` (`/usr/bin/log show --predicate 'subsystem == "manolo.droid-house"'`; plain `log` is a zsh builtin). macOS won't relaunch the app for a reply, so replies only work while DroidHouse is running.
   - Clipboard: `ClipboardSyncManager` (created at launch in `droid_houseApp`; polls the phone every 1 s), `ClipboardSyncView`. Password-like copies are not synced.
-  - Roster: `RosterStore`, `RosterView`.
   - Transfers: `TransferManager`, `TransfersView`, `TransferStatusPill`, `ArchiveTransferEngine` (tar backup and restore over adb or Wi-Fi), `TimestampTransferView`.
   - Previews: `FilePreviewPanel`, `ThumbnailManager`, `ScreenshotGalleryView`, `StorageIndicatorView`.
   - Look and feel: `DesignSystem.swift`, `Styles.swift`, `LiquidProgressBar.swift`. The "spatial glass" UI uses a true-black background.

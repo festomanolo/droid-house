@@ -6,7 +6,6 @@ enum NavigationSection: String, CaseIterable, Identifiable {
     case messages = "Messages"
     case aeroCast = "AeroCast"
     case studioInput = "Studio Cam & Mic"
-    case roster = "Smart Sync"
     case clipboard = "Clipboard Sync"
     case screenshots = "Screenshots"
     case transfers = "Transfers"
@@ -20,7 +19,6 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .messages: return "message.fill"
         case .aeroCast: return "airplayvideo"
         case .studioInput: return "video.badge.waveform.fill"
-        case .roster: return "tablecells.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .screenshots: return "photo.on.rectangle.angled"
         case .transfers: return "arrow.up.arrow.down.circle"
@@ -34,7 +32,6 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .messages: return .green
         case .aeroCast: return .dhAccentViolet
         case .studioInput: return .dhAccentMint
-        case .roster: return .dhAccentMint
         case .clipboard: return .orange
         case .screenshots: return .purple
         case .transfers: return .cyan
@@ -49,7 +46,6 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .messages: return "Read and reply to SMS threads"
         case .aeroCast: return "Mirror the screen and audio"
         case .studioInput: return "Camera & studio mic input for Mac"
-        case .roster: return "Raw, unmerged tabular data"
         case .clipboard: return "Two-way clipboard bridge"
         case .screenshots: return "Live screenshot gallery"
         case .transfers: return "Active and past file transfers"
@@ -61,7 +57,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
     /// paired with the file inspector.
     var usesInspector: Bool {
         switch self {
-        case .aeroCast, .studioInput, .roster, .transfers, .macRemote: return false
+        case .aeroCast, .studioInput, .transfers, .macRemote: return false
         default: return true
         }
     }

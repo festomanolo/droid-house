@@ -171,7 +171,7 @@ struct SidebarView: View {
 
     /// The companion-backed panes, in the order the product presents them.
     private static let companionSections: [NavigationSection] = [
-        .messages, .aeroCast, .studioInput, .macRemote, .roster, .clipboard, .screenshots, .transfers
+        .messages, .aeroCast, .studioInput, .macRemote, .clipboard, .screenshots, .transfers
     ]
 
     // MARK: - Bookmarks
