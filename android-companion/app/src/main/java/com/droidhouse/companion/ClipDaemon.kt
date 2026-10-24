@@ -136,3 +136,23 @@ object ClipDaemon {
         val apk = System.getProperty("java.class.path").orEmpty().split(':').firstOrNull().orEmpty()
         Thread {
             while (true) {
+                if (apk.isNotEmpty() && !File(apk).exists()) {
+                    log("companion was reinstalled; exiting")
+                    System.exit(0)
+                }
+                post("/api/clipboard/daemon", "{}")
+                Thread.sleep(HEARTBEAT_MS)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** The first String is the calling package; any later one is an attribution tag. */
+    private fun fillArgs(method: Method, listener: Any?): Array<Any?> {
+        val packageIndex = method.parameterTypes.indexOfFirst { it == String::class.java }
+        return method.parameterTypes.mapIndexed { index, type ->
+            when {
+                type == String::class.java -> if (index == packageIndex) SHELL_PACKAGE else null
+                type == Int::class.javaPrimitiveType -> 0
+                type == Boolean::class.javaPrimitiveType -> false
+                listener != null && type.isInstance(listener) -> listener
+                else -> null
