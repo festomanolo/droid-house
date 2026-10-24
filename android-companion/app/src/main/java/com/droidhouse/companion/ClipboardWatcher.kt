@@ -98,6 +98,18 @@ class ClipboardWatcher(private val context: Context) {
 
     /**
      * A copy made anywhere on the phone, reported by [ClipDaemon]. A value
+     * equal to the current one is the daemon seeing our own [setClipboard]
+     * write, and is dropped so it isn't echoed back to the Mac.
+     */
+    fun acceptFromDaemon(text: String) {
+        markDaemonAlive()
+        if (text.isEmpty() || text == currentClipText) return
+        currentClipText = text
+        lastKnownText = text
+        lastUpdatedTimestamp = System.currentTimeMillis()
+        ClipboardBridge.publish(text, "daemon")
+    }
+
     fun setClipboard(text: String) {
         if (text == currentClipText) return
         currentClipText = text
