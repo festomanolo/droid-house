@@ -119,7 +119,7 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - `GET /api/screenshots`, `GET /api/screenshots/file`.
   - Code: `ScreenshotWatcher.kt`.
 - Roster:
-  - `GET /api/roster/{table}`.
+  - `GET /api/roster/{table}`. Unused: the Mac's "Smart Sync" screen that called it was removed in 1.7.
 - AeroCast:
   - `/api/aerocast/{start,stop,status}`.
   - Code: `AeroCastConsentActivity.kt` handles MediaProjection consent.
