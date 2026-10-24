@@ -249,7 +249,7 @@ struct ContentView: View {
                 switch selectedSection {
                 case .messages:
                     ContactsSidebarView(selectedContact: $selectedContact)
-                case .aeroCast, .studioInput, .roster, .transfers, .macRemote:
+                case .aeroCast, .studioInput, .transfers, .macRemote:
                     // These panes own their full canvas; the inspector would
                     // only steal width from them.
                     EmptyView()
