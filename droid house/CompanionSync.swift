@@ -160,7 +160,7 @@ final class CompanionSync: ObservableObject {
         wifiDeviceID = nil
         CompanionLink.endpoint = .loopback
         // Always make sure the poll loop is alive, even on a repeat call — it
-        // is what keeps `isConnected` (and therefore clipboard, roster and
+        // is what keeps `isConnected` (and therefore clipboard and
         // messaging) truthful after a transient drop.
         startPolling()
 
