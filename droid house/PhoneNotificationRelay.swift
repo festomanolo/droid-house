@@ -47,6 +47,7 @@ final class PhoneNotificationRelay: NSObject {
         isActivated = true
 
         center.delegate = self
+        relayLog.info("delegate installed")
 
         let reply = UNTextInputNotificationAction(
             identifier: Self.replyActionID,
