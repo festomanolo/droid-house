@@ -166,7 +166,8 @@ class BridgeServer(
                             // Tells the Mac whether a background read is even
                             // possible, so its UI can explain the situation
                             // instead of looking broken.
-                            backgroundReadable = false
+                            backgroundReadable = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                                clipboardWatcher.isDaemonAlive()
                         )
                     )
                 }
