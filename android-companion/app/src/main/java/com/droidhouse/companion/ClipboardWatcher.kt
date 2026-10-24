@@ -98,9 +98,6 @@ class ClipboardWatcher(private val context: Context) {
             currentClipText to lastUpdatedTimestamp
         }
 
-    @Volatile
-    private var daemonSeenAt: Long = 0L
-
     fun markDaemonAlive() {
         daemonSeenAt = System.currentTimeMillis()
     }
