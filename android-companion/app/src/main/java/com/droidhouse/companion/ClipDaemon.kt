@@ -57,3 +57,23 @@ object ClipDaemon {
             log("already running")
             return
         }
+
+        runCatching {
+            Class.forName("android.os.Process")
+                .getMethod("setArgV0", String::class.java)
+                .invoke(null, "droidhouse-clipd")
+        }
+
+        Looper.prepareMainLooper()
+
+        val binder = Class.forName("android.os.ServiceManager")
+            .getMethod("getService", String::class.java)
+            .invoke(null, "clipboard") as IBinder
+        clipboard = Class.forName("android.content.IClipboard\$Stub")
+            .getMethod("asInterface", IBinder::class.java)
+            .invoke(null, binder)!!
+        getPrimaryClip = clipboard.javaClass.methods.first { it.name == "getPrimaryClip" }
+
+        // Seed with the current clip so starting the daemon doesn't overwrite
+        // whatever is on the Mac.
+        lastText = readClip().orEmpty()
