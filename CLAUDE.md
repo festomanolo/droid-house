@@ -57,7 +57,8 @@ Author: Nolo (@festomanolo, festomanolofm@gmail.com). The project is proprietary
   - `compileSdk`/`targetSdk` 35, `minSdk` 28 (Android 9).
   - Guard any API ≥ 29 call with `Build.VERSION.SDK_INT` or `@RequiresApi`, then run lint.
   - Example: AeroCast audio needs Q+, so Android 9 casts video only.
-- Versions are `versionCode 5` and `versionName "2.3"`, in `app/build.gradle.kts`.
+- Versions are `versionCode 6` and `versionName "2.4"`, in `app/build.gradle.kts`.
+- Debug builds include `ReplyProbeReceiver` (`app/src/debug/`), a repliable test notification for testing Mac notification replies without messaging a real contact: `adb shell am broadcast -n com.droidhouse.companion/.ReplyProbeReceiver -a com.droidhouse.companion.debug.POST_PROBE --es text "hi"`. The reply lands in `logcat -s ReplyProbe`.
 - Lint: `./gradlew lintDebug`. Run it online. It already fails with errors that existed before the Wi-Fi work: MissingPermission in `StudioStreamService.openCamera`, StartActivityAndCollapseDeprecated, and ChromeOS telephony. Don't add new errors.
 - Dependencies: Ktor 2.3.12 (server-core, CIO, content-negotiation, cors, status-pages, kotlinx-json), kotlinx-serialization 1.7.3, coroutines 1.8.1, OkHttp 4.12, Compose BOM 2024.09.03.
 
