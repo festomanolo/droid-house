@@ -197,7 +197,7 @@ struct ContentView: View {
         .tint(colorFromName(appThemeColor))
     }
 
-    /// AeroCast, Roster and Transfers render edge-to-edge, so the inspector is
+    /// AeroCast, Studio and Transfers render edge-to-edge, so the inspector is
     /// suppressed for them regardless of the user's toggle — which is restored
     /// intact the moment they navigate back to a pane that uses it.
     private var inspectorPresented: Binding<Bool> {
