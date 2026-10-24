@@ -13,8 +13,9 @@ import android.util.Log
  *
  * Note the platform constraint: since Android 10, reading the clipboard is only
  * permitted for the app that currently holds focus (or the default IME). The
- * listener therefore fires reliably while this app is foregrounded, and the
- * write direction — Mac → phone — always works.
+ * listener therefore only fires while this app is foregrounded; copies made
+ * elsewhere arrive through [ClipDaemon] instead. The write direction — Mac →
+ * phone — always works.
  */
 class ClipboardWatcher(private val context: Context) {
 
