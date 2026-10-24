@@ -32,9 +32,9 @@ data class ClipboardPayload(
     /** Which route captured this text: listener, daemon, share, tile, capture-activity, mac. */
     val source: String = "Android",
     /**
-     * False on Android 10+, where only the foreground app or active IME may
-     * read the clipboard. The Mac uses this to explain why a background copy
-     * on the phone doesn't appear on its own.
+     * False on Android 10+ unless [ClipDaemon] is running, since otherwise only
+     * the foreground app or active IME may read the clipboard. The Mac uses
+     * this to start the daemon, or to explain why a copy didn't arrive.
      */
     val backgroundReadable: Boolean = false
 )
