@@ -19,7 +19,6 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .messages: return "message.fill"
         case .aeroCast: return "airplayvideo"
         case .studioInput: return "video.badge.waveform.fill"
-        case .roster: return "tablecells.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .screenshots: return "photo.on.rectangle.angled"
         case .transfers: return "arrow.up.arrow.down.circle"
