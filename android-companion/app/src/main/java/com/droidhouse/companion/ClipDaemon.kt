@@ -77,3 +77,22 @@ object ClipDaemon {
         // Seed with the current clip so starting the daemon doesn't overwrite
         // whatever is on the Mac.
         lastText = readClip().orEmpty()
+
+        registerListener()
+        startHeartbeat()
+        log("listening")
+
+        Looper.loop()
+        lock.close()
+    }
+
+    /**
+     * IOnPrimaryClipChangedListener has one oneway method, so any transaction
+     * on a plain Binder is the change notification. Wrapping the Binder with
+     * the hidden Stub's asInterface gives a proxy of the right type to pass in.
+     */
+    private fun registerListener() {
+        val callback = object : Binder() {
+            override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+                if (code == FIRST_CALL_TRANSACTION) {
+                    onClipChanged()
