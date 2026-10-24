@@ -67,6 +67,11 @@ final class ClipboardSyncManager: ObservableObject {
         guard let snapshot = await companionSync.androidClipboardSnapshot() else { return }
 
         if androidSource != snapshot.source { androidSource = snapshot.source }
+        if phoneAutoSync != snapshot.backgroundReadable { phoneAutoSync = snapshot.backgroundReadable }
+        if !snapshot.backgroundReadable {
+            // Rebooted or reinstalled since the last adb attach.
+            await companionSync.ensureClipboardDaemon()
+        }
 
         guard snapshot.timestamp > lastAndroidTimestamp else { return }
         lastAndroidTimestamp = snapshot.timestamp
