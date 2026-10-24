@@ -235,8 +235,6 @@ struct ContentView: View {
                     StudioCamView(adbService: adbService)
                 case .macRemote:
                     MacRemoteAccessView()
-                case .roster:
-                    RosterView(adbService: adbService)
                 case .clipboard:
                     ClipboardSyncView()
                 case .screenshots:
