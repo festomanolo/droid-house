@@ -571,7 +571,7 @@ final class CompanionSync: ObservableObject {
         /// Device-clock milliseconds; used to tell a genuinely new clip from a
         /// re-read of the same one.
         let timestamp: Int64
-        /// Which route captured it: listener, share, tile, capture-activity, mac.
+        /// Which route captured it: listener, daemon, share, tile, capture-activity, mac.
         let source: String
     }
 
