@@ -37,3 +37,23 @@ import java.net.URL
  * than by position: strings get the shell's package name and ints get 0 (user
  * 0, default device).
  */
+object ClipDaemon {
+
+    /** Abstract socket used purely as a single-instance lock. */
+    private const val LOCK_NAME = "droidhouse_clipd"
+    private const val SHELL_PACKAGE = "com.android.shell"
+    private const val BRIDGE = "http://127.0.0.1:8080"
+    private const val HEARTBEAT_MS = 15_000L
+
+    private lateinit var clipboard: Any
+    private lateinit var getPrimaryClip: Method
+
+    @Volatile
+    private var lastText: String = ""
+
+    @JvmStatic
+    fun main(args: Array<String>) {
+        val lock = runCatching { LocalServerSocket(LOCK_NAME) }.getOrElse {
+            log("already running")
+            return
+        }
