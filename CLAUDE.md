@@ -170,8 +170,8 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
     - `StudioAudioRouter` routes audio into the BoomAudio virtual mic.
     - `StudioCaptureManager` handles photo, video and WAV capture.
     - `StudioVirtualCamManager` is the CoreMediaIO webcam.
-  - Messages: `MessagesView`, `ChatBubble`, `ContactsSidebarView`, `ReplyTag`, `SmartReplyEngine`. Replies from macOS notifications go through `PhoneNotificationRelay`.
-  - Clipboard: `ClipboardSyncManager`, `ClipboardSyncView`. Password-like copies are not synced.
+  - Messages: `MessagesView`, `ChatBubble`, `ContactsSidebarView`, `ReplyTag`, `SmartReplyEngine`. Replies from macOS notifications go through `PhoneNotificationRelay`, which logs to subsystem `manolo.droid-house`, category `notifications` (`/usr/bin/log show --predicate 'subsystem == "manolo.droid-house"'`; plain `log` is a zsh builtin). macOS won't relaunch the app for a reply, so replies only work while DroidHouse is running.
+  - Clipboard: `ClipboardSyncManager` (created at launch in `droid_houseApp`; polls the phone every 1 s), `ClipboardSyncView`. Password-like copies are not synced.
   - Roster: `RosterStore`, `RosterView`.
   - Transfers: `TransferManager`, `TransfersView`, `TransferStatusPill`, `ArchiveTransferEngine` (tar backup and restore over adb or Wi-Fi), `TimestampTransferView`.
   - Previews: `FilePreviewPanel`, `ThumbnailManager`, `ScreenshotGalleryView`, `StorageIndicatorView`.
