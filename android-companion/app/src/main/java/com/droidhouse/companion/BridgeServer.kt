@@ -50,7 +50,7 @@ class BridgeServer(
         private const val TAG = "BridgeServer"
         /** 2 adds Wi-Fi pairing, the file API and remote input; 3 adds the developer mode switch. */
         const val PROTOCOL_VERSION = 3
-        const val VERSION = "2.3"
+        const val VERSION = "2.4"
     }
 
     private val smsRepository = SmsRepository(appContext)
