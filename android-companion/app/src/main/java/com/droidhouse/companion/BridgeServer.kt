@@ -172,6 +172,26 @@ class BridgeServer(
                     )
                 }
 
+                // Both come from ClipDaemon on the phone itself, never from a Mac.
+                post("/api/clipboard/phone") {
+                    if (!LanAccess.isLoopback(call.request.local.remoteAddress)) {
+                        call.respond(HttpStatusCode.Forbidden, SimpleResult(false, "Local only"))
+                        return@post
+                    }
+                    val request = call.receive<SetClipboardRequest>()
+                    clipboardWatcher.acceptFromDaemon(request.text)
+                    call.respond(SimpleResult(true, "ok"))
+                }
+
+                post("/api/clipboard/daemon") {
+                    if (!LanAccess.isLoopback(call.request.local.remoteAddress)) {
+                        call.respond(HttpStatusCode.Forbidden, SimpleResult(false, "Local only"))
+                        return@post
+                    }
+                    clipboardWatcher.markDaemonAlive()
+                    call.respond(SimpleResult(true, "ok"))
+                }
+
                 post("/api/clipboard") {
                     val request = call.receive<SetClipboardRequest>()
                     clipboardWatcher.setClipboard(request.text)
