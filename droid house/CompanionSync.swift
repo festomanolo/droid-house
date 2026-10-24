@@ -592,7 +592,7 @@ final class CompanionSync: ObservableObject {
               Date().timeIntervalSince(lastDaemonLaunch) > 30 else { return }
         lastDaemonLaunch = Date()
 
-        let package = DeveloperModeControl.companionPackage
+        let package = DeveloperModeController.companionPackage
         let script = "pgrep -f droidhouse-clipd >/dev/null || { " +
             "P=$(pm path \(package) | head -n 1); P=${P#package:}; " +
             "[ -n \"$P\" ] && CLASSPATH=$P nohup app_process /system/bin \(package).ClipDaemon >/dev/null 2>&1 & }"
