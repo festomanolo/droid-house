@@ -57,7 +57,7 @@ enum NavigationSection: String, CaseIterable, Identifiable {
     /// paired with the file inspector.
     var usesInspector: Bool {
         switch self {
-        case .aeroCast, .studioInput, .roster, .transfers, .macRemote: return false
+        case .aeroCast, .studioInput, .transfers, .macRemote: return false
         default: return true
         }
     }
