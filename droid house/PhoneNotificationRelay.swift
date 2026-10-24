@@ -117,6 +117,7 @@ final class PhoneNotificationRelay: NSObject {
             content: content,
             trigger: nil
         )
+        center.add(request) { error in
         center.add(request)
     }
 
