@@ -619,7 +619,8 @@ final class CompanionSync: ObservableObject {
         return ClipboardSnapshot(
             text: json["text"] as? String ?? "",
             timestamp: (json["timestamp"] as? NSNumber)?.int64Value ?? 0,
-            source: json["source"] as? String ?? "unknown"
+            source: json["source"] as? String ?? "unknown",
+            backgroundReadable: json["backgroundReadable"] as? Bool ?? false
         )
     }
 
