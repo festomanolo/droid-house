@@ -25,6 +25,10 @@ struct droid_houseApp: App {
         // Before launch completes, so a reply typed into a banner while the
         // app was quit still reaches the delegate.
         PhoneNotificationRelay.shared.activate()
+
+        // The manager starts syncing in its init. It used to be created only
+        // by ClipboardSyncView, so nothing synced until that screen was opened.
+        _ = ClipboardSyncManager.shared
     }
 
     var body: some Scene {
