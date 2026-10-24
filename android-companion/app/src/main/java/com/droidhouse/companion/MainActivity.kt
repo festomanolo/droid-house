@@ -730,9 +730,13 @@ private fun ClipboardCard(state: CompanionUiState, onCaptureClipboard: () -> Boo
         HairlineDivider()
         // Being explicit about the platform limit beats looking broken.
         Text(
-            text = "Android blocks background clipboard reads. Use the DroidHouse " +
-                "action in the text selection toolbar, the Quick Settings tile, or " +
-                "open this app.",
+            text = if (state.clipboardAutomatic)
+                "Anything you copy is sent to your Mac automatically."
+            else
+                "Android blocks background clipboard reads. Connect this phone to " +
+                    "DroidHouse on your Mac over adb once and copies sync on their " +
+                    "own until the next reboot. Until then, use the DroidHouse " +
+                    "action, the Quick Settings tile, or the button below.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
