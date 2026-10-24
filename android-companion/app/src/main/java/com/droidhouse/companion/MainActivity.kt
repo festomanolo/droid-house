@@ -261,6 +261,7 @@ private fun CompanionScreen(
                 sentCount = SentOutbox.count(),
                 clipboardPreview = ClipboardBridge.capturedText.take(90),
                 clipboardSource = ClipboardBridge.captureSource,
+                clipboardAutomatic = ClipboardWatcher.isAutomatic(),
                 aeroCastStreaming = aeroCast.streaming,
                 aeroCastMessage = aeroCast.message,
                 aeroCastSize = if (aeroCast.width > 0) "${aeroCast.width}×${aeroCast.height}" else "",
