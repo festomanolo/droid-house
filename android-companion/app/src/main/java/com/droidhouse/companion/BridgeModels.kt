@@ -29,7 +29,7 @@ data class StatusPayload(
 data class ClipboardPayload(
     val text: String,
     val timestamp: Long,
-    /** Which route captured this text: listener, share, tile, capture-activity, mac. */
+    /** Which route captured this text: listener, daemon, share, tile, capture-activity, mac. */
     val source: String = "Android",
     /**
      * False on Android 10+, where only the foreground app or active IME may
