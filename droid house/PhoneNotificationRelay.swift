@@ -164,7 +164,7 @@ extension PhoneNotificationRelay: UNUserNotificationCenterDelegate {
         let phoneID = info["phoneID"] as? String
         let title = info["title"] as? String ?? ""
         let appLabel = info["appLabel"] as? String ?? ""
-        print("PhoneNotificationRelay: response \(response.actionIdentifier) for \(phoneID ?? "?")")
+        relayLog.info("response \(response.actionIdentifier, privacy: .public)")
 
         switch response.actionIdentifier {
         case Self.replyActionID:
