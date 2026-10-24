@@ -20,6 +20,10 @@ final class ClipboardSyncManager: ObservableObject {
     /// explain why a background copy on the device may not arrive on its own.
     @Published private(set) var androidSource: String = "none"
 
+    /// True when copies made in any app on the phone arrive by themselves.
+    /// On Android 10+ that needs the companion's clipboard daemon running.
+    @Published private(set) var phoneAutoSync: Bool = false
+
     private var changeCount: Int = NSPasteboard.general.changeCount
     private var timer: Timer?
     private var androidPollTask: Task<Void, Never>?
