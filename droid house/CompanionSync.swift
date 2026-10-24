@@ -593,7 +593,7 @@ final class CompanionSync: ObservableObject {
         lastDaemonLaunch = Date()
 
         let package = DeveloperModeController.companionPackage
-        let script = "pgrep -f droidhouse-clipd >/dev/null || { " +
+        let script = "pidof droidhouse-clipd >/dev/null || { " +
             "P=$(pm path \(package) | head -n 1); P=${P#package:}; " +
             "[ -n \"$P\" ] && CLASSPATH=$P nohup app_process /system/bin \(package).ClipDaemon >/dev/null 2>&1 & }"
         _ = try? await ADBProcess.run(
