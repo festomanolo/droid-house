@@ -52,7 +52,7 @@ final class ClipboardSyncManager: ObservableObject {
         androidPollTask?.cancel()
         androidPollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self else { return }
                 guard self.isAutoSyncEnabled else { continue }
                 await self.pollAndroidClipboard()
