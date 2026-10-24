@@ -43,7 +43,7 @@ Author: Nolo (@festomanolo, festomanolofm@gmail.com). The project is proprietary
   xcodebuild -project "droid house.xcodeproj" -scheme "droid house" -configuration Debug \
     CODE_SIGNING_ALLOWED=NO SYMROOT=<scratch>/sym OBJROOT=<scratch>/obj build
   ```
-- Release: `./release.sh`. It builds Release, ad-hoc signs (notification replies need a signature), and creates `DroidHouse_v1.6.dmg`. Bump `DMG_NAME` and the version inside it.
+- Release: `./release.sh`. It builds Release, ad-hoc signs (notification replies need a signature), and creates `DroidHouse_v1.7.dmg`. Bump `DMG_NAME` and the version inside it.
 - Paths contain spaces (`droid house`), so always quote them. In zsh scripts, use arrays.
 
 **Android companion**
