@@ -134,7 +134,7 @@ final class PhoneNotificationRelay: NSObject {
             relayLog.info("reply sent")
             return
         }
-        print("PhoneNotificationRelay: reply to \(phoneID) failed: \(failure)")
+        relayLog.error("reply failed: \(failure, privacy: .public)")
 
         let content = UNMutableNotificationContent()
         content.title = "Reply not sent"
