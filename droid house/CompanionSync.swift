@@ -573,6 +573,34 @@ final class CompanionSync: ObservableObject {
         let timestamp: Int64
         /// Which route captured it: listener, daemon, share, tile, capture-activity, mac.
         let source: String
+        /// Whether the phone can see copies made in other apps right now.
+        let backgroundReadable: Bool
+    }
+
+    private var lastDaemonLaunch: Date = .distantPast
+
+    /// Starts the companion's clipboard daemon over adb, unless it's running.
+    ///
+    /// Android 10+ lets only the shell user read the clipboard from the
+    /// background, so automatic phone → Mac sync needs `ClipDaemon` running as
+    /// shell. It survives adb disconnecting but not a reboot or a companion
+    /// reinstall, so this is called on every adb attach and whenever the phone
+    /// reports it can't read the clipboard. Over Wi-Fi only it can't be
+    /// started, and copies on the phone wait until adb is seen again.
+    func ensureClipboardDaemon() async {
+        guard let serial = portForwardedSerial,
+              Date().timeIntervalSince(lastDaemonLaunch) > 30 else { return }
+        lastDaemonLaunch = Date()
+
+        let package = DeveloperModeControl.companionPackage
+        let script = "pgrep -f droidhouse-clipd >/dev/null || { " +
+            "P=$(pm path \(package) | head -n 1); P=${P#package:}; " +
+            "[ -n \"$P\" ] && CLASSPATH=$P nohup app_process /system/bin \(package).ClipDaemon >/dev/null 2>&1 & }"
+        _ = try? await ADBProcess.run(
+            adb: lastAdbPath,
+            arguments: ["-s", serial, "shell", script],
+            timeout: 10
+        )
     }
 
     /// Full clipboard state from the phone, including provenance.
