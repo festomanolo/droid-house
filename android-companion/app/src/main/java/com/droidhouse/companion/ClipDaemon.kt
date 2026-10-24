@@ -116,3 +116,23 @@ object ClipDaemon {
         lastText = text
         post("/api/clipboard/phone", JSONObject().put("text", text).toString())
     }
+
+    private fun readClip(): String? = runCatching {
+        val clip = getPrimaryClip.invoke(clipboard, *fillArgs(getPrimaryClip, null)) as ClipData?
+        if (clip == null || clip.itemCount == 0) return null
+        val item = clip.getItemAt(0)
+        (item.text ?: item.htmlText)?.toString()
+    }.getOrElse {
+        log("read failed: ${it.cause ?: it}")
+        null
+    }
+
+    /**
+     * Tells the bridge the daemon is alive, and exits once the APK it was
+     * started from has been replaced, so a reinstall never leaves old code
+     * running.
+     */
+    private fun startHeartbeat() {
+        val apk = System.getProperty("java.class.path").orEmpty().split(':').firstOrNull().orEmpty()
+        Thread {
+            while (true) {
