@@ -153,7 +153,7 @@ extension PhoneNotificationRelay: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         relayLog.info("willPresent")
-        [.banner, .list, .sound]
+        return [.banner, .list, .sound]
     }
 
     nonisolated func userNotificationCenter(
