@@ -6,7 +6,6 @@ enum NavigationSection: String, CaseIterable, Identifiable {
     case messages = "Messages"
     case aeroCast = "AeroCast"
     case studioInput = "Studio Cam & Mic"
-    case roster = "Smart Sync"
     case clipboard = "Clipboard Sync"
     case screenshots = "Screenshots"
     case transfers = "Transfers"
