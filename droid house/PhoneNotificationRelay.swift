@@ -118,6 +118,7 @@ final class PhoneNotificationRelay: NSObject {
             trigger: nil
         )
         center.add(request) { error in
+            if let error { print("PhoneNotificationRelay: post failed: \(error.localizedDescription)") }
         center.add(request)
     }
 
