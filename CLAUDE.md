@@ -113,7 +113,8 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
 - Clipboard:
   - `GET`/`POST /api/clipboard`. `backgroundReadable` says whether phone copies arrive on their own.
   - `POST /api/clipboard/phone` and `POST /api/clipboard/daemon` (heartbeat): loopback only, called by `ClipDaemon` on the phone.
-  - Code: `ClipboardBridge.kt`, `ClipboardWatcher.kt`.
+  - Code: `ClipboardBridge.kt`, `ClipboardWatcher.kt`, `ClipDaemon.kt`.
+  - Automatic phone → Mac on Android 10+: apps can't read the clipboard in the background, but the shell user can (`READ_CLIPBOARD_IN_BACKGROUND`, as scrcpy does). `ClipDaemon` is started from the APK over adb with `app_process`, runs as shell under the name `droidhouse-clipd`, listens for clip changes and posts them to the bridge on loopback. It survives adb disconnecting, exits on reboot or when the APK is replaced, and the Mac (`CompanionSync.ensureClipboardDaemon`) restarts it on adb attach or when `backgroundReadable` is false. Check it with `adb shell pidof droidhouse-clipd` (not `pgrep -f`, which matches the launching shell).
 - Screenshots:
   - `GET /api/screenshots`, `GET /api/screenshots/file`.
   - Code: `ScreenshotWatcher.kt`.
