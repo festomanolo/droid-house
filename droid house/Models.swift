@@ -46,7 +46,6 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .messages: return "Read and reply to SMS threads"
         case .aeroCast: return "Mirror the screen and audio"
         case .studioInput: return "Camera & studio mic input for Mac"
-        case .roster: return "Raw, unmerged tabular data"
         case .clipboard: return "Two-way clipboard bridge"
         case .screenshots: return "Live screenshot gallery"
         case .transfers: return "Active and past file transfers"
