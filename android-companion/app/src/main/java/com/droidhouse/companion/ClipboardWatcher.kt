@@ -3,6 +3,7 @@ package com.droidhouse.companion
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -12,8 +13,9 @@ import android.util.Log
  *
  * Note the platform constraint: since Android 10, reading the clipboard is only
  * permitted for the app that currently holds focus (or the default IME). The
- * listener therefore fires reliably while this app is foregrounded, and the
- * write direction — Mac → phone — always works.
+ * listener therefore only fires while this app is foregrounded; copies made
+ * elsewhere arrive through [ClipDaemon] instead. The write direction — Mac →
+ * phone — always works.
  */
 class ClipboardWatcher(private val context: Context) {
 
@@ -24,6 +26,16 @@ class ClipboardWatcher(private val context: Context) {
         @Volatile
         var lastKnownText: String = ""
             private set
+
+        @Volatile
+        private var daemonSeenAt: Long = 0L
+
+        /** The daemon heartbeats every 15 s; allow for a couple of missed beats. */
+        fun isDaemonAlive(): Boolean = System.currentTimeMillis() - daemonSeenAt < 45_000
+
+        /** True when copies made in any app reach the bridge by themselves. */
+        fun isAutomatic(): Boolean =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || isDaemonAlive()
     }
 
     private val clipboardManager =
@@ -85,6 +97,24 @@ class ClipboardWatcher(private val context: Context) {
         } else {
             currentClipText to lastUpdatedTimestamp
         }
+
+    fun markDaemonAlive() {
+        daemonSeenAt = System.currentTimeMillis()
+    }
+
+    /**
+     * A copy made anywhere on the phone, reported by [ClipDaemon]. A value
+     * equal to the current one is the daemon seeing our own [setClipboard]
+     * write, and is dropped so it isn't echoed back to the Mac.
+     */
+    fun acceptFromDaemon(text: String) {
+        markDaemonAlive()
+        if (text.isEmpty() || text == currentClipText) return
+        currentClipText = text
+        lastKnownText = text
+        lastUpdatedTimestamp = System.currentTimeMillis()
+        ClipboardBridge.publish(text, "daemon")
+    }
 
     fun setClipboard(text: String) {
         if (text == currentClipText) return

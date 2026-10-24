@@ -170,8 +170,9 @@ class NotificationService : NotificationListenerService() {
     }
 
     private fun record(sbn: StatusBarNotification) {
-        // Our own foreground-service notification is noise on the Mac.
-        if (sbn.packageName == packageName) return
+        // Our own foreground-service notification is noise on the Mac. Only
+        // ongoing ones are skipped so the debug reply probe still comes through.
+        if (sbn.packageName == packageName && sbn.isOngoing) return
 
         // Group summaries ("5 messages from 2 chats") only restate their
         // children, and their reply action — if any — has no single thread.

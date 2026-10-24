@@ -20,6 +20,10 @@ final class ClipboardSyncManager: ObservableObject {
     /// explain why a background copy on the device may not arrive on its own.
     @Published private(set) var androidSource: String = "none"
 
+    /// True when copies made in any app on the phone arrive by themselves.
+    /// On Android 10+ that needs the companion's clipboard daemon running.
+    @Published private(set) var phoneAutoSync: Bool = false
+
     private var changeCount: Int = NSPasteboard.general.changeCount
     private var timer: Timer?
     private var androidPollTask: Task<Void, Never>?
@@ -48,7 +52,7 @@ final class ClipboardSyncManager: ObservableObject {
         androidPollTask?.cancel()
         androidPollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self else { return }
                 guard self.isAutoSyncEnabled else { continue }
                 await self.pollAndroidClipboard()
@@ -63,6 +67,11 @@ final class ClipboardSyncManager: ObservableObject {
         guard let snapshot = await companionSync.androidClipboardSnapshot() else { return }
 
         if androidSource != snapshot.source { androidSource = snapshot.source }
+        if phoneAutoSync != snapshot.backgroundReadable { phoneAutoSync = snapshot.backgroundReadable }
+        if !snapshot.backgroundReadable {
+            // Rebooted or reinstalled since the last adb attach.
+            await companionSync.ensureClipboardDaemon()
+        }
 
         guard snapshot.timestamp > lastAndroidTimestamp else { return }
         lastAndroidTimestamp = snapshot.timestamp

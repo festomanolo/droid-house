@@ -208,6 +208,7 @@ private data class CompanionUiState(
     val sentCount: Int = 0,
     val clipboardPreview: String = "",
     val clipboardSource: String = "none",
+    val clipboardAutomatic: Boolean = false,
     val aeroCastStreaming: Boolean = false,
     val aeroCastMessage: String = "Idle",
     val aeroCastSize: String = "",
@@ -260,6 +261,7 @@ private fun CompanionScreen(
                 sentCount = SentOutbox.count(),
                 clipboardPreview = ClipboardBridge.capturedText.take(90),
                 clipboardSource = ClipboardBridge.captureSource,
+                clipboardAutomatic = ClipboardWatcher.isAutomatic(),
                 aeroCastStreaming = aeroCast.streaming,
                 aeroCastMessage = aeroCast.message,
                 aeroCastSize = if (aeroCast.width > 0) "${aeroCast.width}×${aeroCast.height}" else "",
@@ -706,6 +708,12 @@ private fun ClipboardCard(state: CompanionUiState, onCaptureClipboard: () -> Boo
         SectionLabel("Clipboard")
         HairlineDivider()
         StatusRow(
+            label = "Sync to Mac",
+            value = if (state.clipboardAutomatic) "Automatic" else "Manual",
+            isGood = state.clipboardAutomatic
+        )
+        HairlineDivider()
+        StatusRow(
             label = "Captured via",
             value = state.clipboardSource,
             isGood = state.clipboardSource != "none"
@@ -722,9 +730,13 @@ private fun ClipboardCard(state: CompanionUiState, onCaptureClipboard: () -> Boo
         HairlineDivider()
         // Being explicit about the platform limit beats looking broken.
         Text(
-            text = "Android blocks background clipboard reads. Use the DroidHouse " +
-                "action in the text selection toolbar, the Quick Settings tile, or " +
-                "open this app.",
+            text = if (state.clipboardAutomatic)
+                "Anything you copy is sent to your Mac automatically."
+            else
+                "Android blocks background clipboard reads. Connect this phone to " +
+                    "DroidHouse on your Mac over adb once and copies sync on their " +
+                    "own until the next reboot. Until then, use the DroidHouse " +
+                    "action, the Quick Settings tile, or the button below.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

@@ -36,14 +36,14 @@ Author: Nolo (@festomanolo, festomanolofm@gmail.com). The project is proprietary
   - Deployment target: macOS 26.2.
   - Swift 5 mode.
   - `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and `SWIFT_APPROACHABLE_CONCURRENCY = YES`. Every type is MainActor unless marked otherwise, so helper structs and classes used off the main actor need `nonisolated`.
-  - Bundle id: `manolo.droid-house`. Marketing version: 1.6.
+  - Bundle id: `manolo.droid-house`. Marketing version: 1.7 (build 7).
   - `INFOPLIST_FILE = Info.plist` (the file in the repo root) holds the local-network keys: `NSLocalNetworkUsageDescription`, `NSBonjourServices` = `_droidhouse._tcp`, and `NSAllowsLocalNetworking`.
 - Build check (keep products out of the repo):
   ```sh
   xcodebuild -project "droid house.xcodeproj" -scheme "droid house" -configuration Debug \
     CODE_SIGNING_ALLOWED=NO SYMROOT=<scratch>/sym OBJROOT=<scratch>/obj build
   ```
-- Release: `./release.sh`. It builds Release, ad-hoc signs (notification replies need a signature), and creates `DroidHouse_v1.6.dmg`. Bump `DMG_NAME` and the version inside it.
+- Release: `./release.sh`. It builds Release, ad-hoc signs (notification replies need a signature), and creates `DroidHouse_v1.7.dmg`. Bump `DMG_NAME` and the version inside it.
 - Paths contain spaces (`droid house`), so always quote them. In zsh scripts, use arrays.
 
 **Android companion**
@@ -57,13 +57,14 @@ Author: Nolo (@festomanolo, festomanolofm@gmail.com). The project is proprietary
   - `compileSdk`/`targetSdk` 35, `minSdk` 28 (Android 9).
   - Guard any API ≥ 29 call with `Build.VERSION.SDK_INT` or `@RequiresApi`, then run lint.
   - Example: AeroCast audio needs Q+, so Android 9 casts video only.
-- Versions are `versionCode 5` and `versionName "2.3"`, in `app/build.gradle.kts`.
+- Versions are `versionCode 6` and `versionName "2.4"`, in `app/build.gradle.kts`.
+- Debug builds include `ReplyProbeReceiver` (`app/src/debug/`), a repliable test notification for testing Mac notification replies without messaging a real contact: `adb shell am broadcast -n com.droidhouse.companion/.ReplyProbeReceiver -a com.droidhouse.companion.debug.POST_PROBE --es text "hi"`. The reply lands in `logcat -s ReplyProbe`.
 - Lint: `./gradlew lintDebug`. Run it online. It already fails with errors that existed before the Wi-Fi work: MissingPermission in `StudioStreamService.openCamera`, StartActivityAndCollapseDeprecated, and ChromeOS telephony. Don't add new errors.
 - Dependencies: Ktor 2.3.12 (server-core, CIO, content-negotiation, cors, status-pages, kotlinx-json), kotlinx-serialization 1.7.3, coroutines 1.8.1, OkHttp 4.12, Compose BOM 2024.09.03.
 
 ## Test device
 
-- Phone: Sony SOV36, Android 9, on wireless adb at `192.168.1.115:5555`.
+- Phones: Samsung Galaxy S21 (SM-G991U1), Android 15, on wireless adb at `192.168.1.182:5555`; Sony SOV36, Android 9, at `192.168.1.115:5555`.
 - For the companion to start, `/data/local/tmp/.nolo_dev` must exist on the phone.
 - Test changes there. Clean up after tests:
   - Remove test pairings with `run-as com.droidhouse.companion`.
@@ -110,8 +111,10 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - `GET /api/notifications`, `POST /api/notifications/reply`.
   - Code: `NotificationService.kt`.
 - Clipboard:
-  - `GET`/`POST /api/clipboard`.
-  - Code: `ClipboardBridge.kt`, `ClipboardWatcher.kt`.
+  - `GET`/`POST /api/clipboard`. `backgroundReadable` says whether phone copies arrive on their own.
+  - `POST /api/clipboard/phone` and `POST /api/clipboard/daemon` (heartbeat): loopback only, called by `ClipDaemon` on the phone.
+  - Code: `ClipboardBridge.kt`, `ClipboardWatcher.kt`, `ClipDaemon.kt`.
+  - Automatic phone → Mac on Android 10+: apps can't read the clipboard in the background, but the shell user can (`READ_CLIPBOARD_IN_BACKGROUND`, as scrcpy does). `ClipDaemon` is started from the APK over adb with `app_process`, runs as shell under the name `droidhouse-clipd`, listens for clip changes and posts them to the bridge on loopback. It survives adb disconnecting, exits on reboot or when the APK is replaced, and the Mac (`CompanionSync.ensureClipboardDaemon`) restarts it on adb attach or when `backgroundReadable` is false. Check it with `adb shell pidof droidhouse-clipd` (not `pgrep -f`, which matches the launching shell).
 - Screenshots:
   - `GET /api/screenshots`, `GET /api/screenshots/file`.
   - Code: `ScreenshotWatcher.kt`.
@@ -167,8 +170,8 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
     - `StudioAudioRouter` routes audio into the BoomAudio virtual mic.
     - `StudioCaptureManager` handles photo, video and WAV capture.
     - `StudioVirtualCamManager` is the CoreMediaIO webcam.
-  - Messages: `MessagesView`, `ChatBubble`, `ContactsSidebarView`, `ReplyTag`, `SmartReplyEngine`. Replies from macOS notifications go through `PhoneNotificationRelay`.
-  - Clipboard: `ClipboardSyncManager`, `ClipboardSyncView`. Password-like copies are not synced.
+  - Messages: `MessagesView`, `ChatBubble`, `ContactsSidebarView`, `ReplyTag`, `SmartReplyEngine`. Replies from macOS notifications go through `PhoneNotificationRelay`, which logs to subsystem `manolo.droid-house`, category `notifications` (`/usr/bin/log show --predicate 'subsystem == "manolo.droid-house"'`; plain `log` is a zsh builtin). macOS won't relaunch the app for a reply, so replies only work while DroidHouse is running.
+  - Clipboard: `ClipboardSyncManager` (created at launch in `droid_houseApp`; polls the phone every 1 s), `ClipboardSyncView`. Password-like copies are not synced.
   - Roster: `RosterStore`, `RosterView`.
   - Transfers: `TransferManager`, `TransfersView`, `TransferStatusPill`, `ArchiveTransferEngine` (tar backup and restore over adb or Wi-Fi), `TimestampTransferView`.
   - Previews: `FilePreviewPanel`, `ThumbnailManager`, `ScreenshotGalleryView`, `StorageIndicatorView`.

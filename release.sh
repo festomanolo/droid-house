@@ -6,9 +6,9 @@
 APP_NAME="droid house"
 SCHEME="droid house"
 BUILD_DIR="./build"
-DMG_NAME="DroidHouse_v1.6.dmg"
+DMG_NAME="DroidHouse_v1.7.dmg"
 
-echo "🚀 Starting Release Process for $APP_NAME v1.6..."
+echo "🚀 Starting Release Process for $APP_NAME v1.7..."
 
 # 0. Check Developer Authorization
 if [ ! -f "droid house/DeveloperConfig.swift" ]; then

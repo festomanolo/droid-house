@@ -1,5 +1,8 @@
 import AppKit
+import OSLog
 import UserNotifications
+
+private let relayLog = Logger(subsystem: "manolo.droid-house", category: "notifications")
 
 /// Re-posts the phone's message notifications (SMS, WhatsApp, Instagram,
 /// Telegram, …) as macOS notifications with an inline Reply field.
@@ -44,6 +47,7 @@ final class PhoneNotificationRelay: NSObject {
         isActivated = true
 
         center.delegate = self
+        relayLog.info("delegate installed")
 
         let reply = UNTextInputNotificationAction(
             identifier: Self.replyActionID,
@@ -117,14 +121,20 @@ final class PhoneNotificationRelay: NSObject {
             content: content,
             trigger: nil
         )
-        center.add(request)
+        center.add(request) { error in
+            if let error { relayLog.error("post failed: \(error.localizedDescription, privacy: .public)") }
+        }
     }
 
     private func handleReply(phoneID: String, text: String, title: String, appLabel: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        guard let failure = await CompanionSync.shared.replyToNotification(id: phoneID, text: trimmed) else { return }
+        guard let failure = await CompanionSync.shared.replyToNotification(id: phoneID, text: trimmed) else {
+            relayLog.info("reply sent")
+            return
+        }
+        relayLog.error("reply failed: \(failure, privacy: .public)")
 
         let content = UNMutableNotificationContent()
         content.title = "Reply not sent"
@@ -142,7 +152,8 @@ extension PhoneNotificationRelay: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+        relayLog.info("willPresent")
+        return [.banner, .list, .sound]
     }
 
     nonisolated func userNotificationCenter(
@@ -153,6 +164,7 @@ extension PhoneNotificationRelay: UNUserNotificationCenterDelegate {
         let phoneID = info["phoneID"] as? String
         let title = info["title"] as? String ?? ""
         let appLabel = info["appLabel"] as? String ?? ""
+        relayLog.info("response \(response.actionIdentifier, privacy: .public)")
 
         switch response.actionIdentifier {
         case Self.replyActionID:

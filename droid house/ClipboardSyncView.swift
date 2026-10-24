@@ -4,7 +4,15 @@ struct ClipboardSyncView: View {
     @ObservedObject var syncManager = ClipboardSyncManager.shared
     @ObservedObject var companionSync = CompanionSync.shared
     @State private var manualText: String = ""
-    
+
+    private var statusLine: String {
+        guard syncManager.isAutoSyncEnabled else { return "Auto-sync disabled. Use manual controls below." }
+        guard companionSync.isConnected else { return "Waiting for the phone." }
+        return syncManager.phoneAutoSync
+            ? "Copies on either device sync automatically."
+            : "Mac → phone is automatic. Connect the phone over adb once to make phone → Mac automatic too."
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Dashboard Header
@@ -18,7 +26,7 @@ struct ClipboardSyncView: View {
                             .controlSize(.small)
                             .help("Auto-sync clipboard between Mac and Android")
                     }
-                    Text(syncManager.isAutoSyncEnabled ? "Real-time bidirectional clipboard polling active" : "Auto-sync disabled. Use manual controls below.")
+                    Text(statusLine)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
