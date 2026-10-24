@@ -111,7 +111,8 @@ The Mac also hosts **Mac Remote Control** on port **8089** (`MacRemoteControlHos
   - `GET /api/notifications`, `POST /api/notifications/reply`.
   - Code: `NotificationService.kt`.
 - Clipboard:
-  - `GET`/`POST /api/clipboard`.
+  - `GET`/`POST /api/clipboard`. `backgroundReadable` says whether phone copies arrive on their own.
+  - `POST /api/clipboard/phone` and `POST /api/clipboard/daemon` (heartbeat): loopback only, called by `ClipDaemon` on the phone.
   - Code: `ClipboardBridge.kt`, `ClipboardWatcher.kt`.
 - Screenshots:
   - `GET /api/screenshots`, `GET /api/screenshots/file`.
