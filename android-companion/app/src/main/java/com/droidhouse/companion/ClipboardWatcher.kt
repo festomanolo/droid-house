@@ -86,6 +86,18 @@ class ClipboardWatcher(private val context: Context) {
             currentClipText to lastUpdatedTimestamp
         }
 
+    @Volatile
+    private var daemonSeenAt: Long = 0L
+
+    fun markDaemonAlive() {
+        daemonSeenAt = System.currentTimeMillis()
+    }
+
+    /** The daemon heartbeats every 15 s; allow for a couple of missed beats. */
+    fun isDaemonAlive(): Boolean = System.currentTimeMillis() - daemonSeenAt < 45_000
+
+    /**
+     * A copy made anywhere on the phone, reported by [ClipDaemon]. A value
     fun setClipboard(text: String) {
         if (text == currentClipText) return
         currentClipText = text
