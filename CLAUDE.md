@@ -36,7 +36,7 @@ Author: Nolo (@festomanolo, festomanolofm@gmail.com). The project is proprietary
   - Deployment target: macOS 26.2.
   - Swift 5 mode.
   - `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and `SWIFT_APPROACHABLE_CONCURRENCY = YES`. Every type is MainActor unless marked otherwise, so helper structs and classes used off the main actor need `nonisolated`.
-  - Bundle id: `manolo.droid-house`. Marketing version: 1.6.
+  - Bundle id: `manolo.droid-house`. Marketing version: 1.7 (build 7).
   - `INFOPLIST_FILE = Info.plist` (the file in the repo root) holds the local-network keys: `NSLocalNetworkUsageDescription`, `NSBonjourServices` = `_droidhouse._tcp`, and `NSAllowsLocalNetworking`.
 - Build check (keep products out of the repo):
   ```sh
