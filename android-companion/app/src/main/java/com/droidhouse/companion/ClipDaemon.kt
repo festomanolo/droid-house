@@ -156,3 +156,23 @@ object ClipDaemon {
                 type == Boolean::class.javaPrimitiveType -> false
                 listener != null && type.isInstance(listener) -> listener
                 else -> null
+            }
+        }.toTypedArray()
+    }
+
+    private fun post(path: String, body: String) {
+        runCatching {
+            val connection = URL(BRIDGE + path).openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 2_000
+            connection.readTimeout = 2_000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.use { it.write(body.toByteArray()) }
+            connection.responseCode
+            connection.disconnect()
+        }
+    }
+
+    private fun log(message: String) = println("droidhouse-clipd: $message")
+}
