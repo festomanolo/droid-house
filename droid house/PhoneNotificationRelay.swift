@@ -152,6 +152,7 @@ extension PhoneNotificationRelay: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
+        relayLog.info("willPresent")
         [.banner, .list, .sound]
     }
 
