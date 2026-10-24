@@ -32,7 +32,6 @@ enum NavigationSection: String, CaseIterable, Identifiable {
         case .messages: return .green
         case .aeroCast: return .dhAccentViolet
         case .studioInput: return .dhAccentMint
-        case .roster: return .dhAccentMint
         case .clipboard: return .orange
         case .screenshots: return .purple
         case .transfers: return .cyan
