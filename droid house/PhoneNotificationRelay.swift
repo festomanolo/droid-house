@@ -126,6 +126,7 @@ final class PhoneNotificationRelay: NSObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        guard let failure = await CompanionSync.shared.replyToNotification(id: phoneID, text: trimmed) else {
         guard let failure = await CompanionSync.shared.replyToNotification(id: phoneID, text: trimmed) else { return }
 
         let content = UNMutableNotificationContent()
