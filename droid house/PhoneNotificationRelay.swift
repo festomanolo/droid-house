@@ -2,6 +2,7 @@ import AppKit
 import OSLog
 import UserNotifications
 
+private let relayLog = Logger(subsystem: "manolo.droid-house", category: "notifications")
 
 /// Re-posts the phone's message notifications (SMS, WhatsApp, Instagram,
 /// Telegram, …) as macOS notifications with an inline Reply field.
