@@ -26,7 +26,7 @@ struct ClipboardSyncView: View {
                             .controlSize(.small)
                             .help("Auto-sync clipboard between Mac and Android")
                     }
-                    Text(syncManager.isAutoSyncEnabled ? "Real-time bidirectional clipboard polling active" : "Auto-sync disabled. Use manual controls below.")
+                    Text(statusLine)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
