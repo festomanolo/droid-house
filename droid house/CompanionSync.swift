@@ -194,6 +194,7 @@ final class CompanionSync: ObservableObject {
                 statusMessage = "Port 8080 forwarded"
                 await checkStatus()
                 await learnCompanionIdentity(serial: serial)
+                await ensureClipboardDaemon()
                 startPolling()
             } else {
                 statusMessage = "Port forward failed"
