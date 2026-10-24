@@ -64,7 +64,7 @@ Author: Nolo (@festomanolo, festomanolofm@gmail.com). The project is proprietary
 
 ## Test device
 
-- Phone: Sony SOV36, Android 9, on wireless adb at `192.168.1.115:5555`.
+- Phones: Samsung Galaxy S21 (SM-G991U1), Android 15, on wireless adb at `192.168.1.182:5555`; Sony SOV36, Android 9, at `192.168.1.115:5555`.
 - For the companion to start, `/data/local/tmp/.nolo_dev` must exist on the phone.
 - Test changes there. Clean up after tests:
   - Remove test pairings with `run-as com.droidhouse.companion`.
