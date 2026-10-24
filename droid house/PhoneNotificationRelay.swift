@@ -130,7 +130,7 @@ final class PhoneNotificationRelay: NSObject {
             print("PhoneNotificationRelay: reply sent to \(phoneID)")
             return
         }
-        guard let failure = await CompanionSync.shared.replyToNotification(id: phoneID, text: trimmed) else { return }
+        print("PhoneNotificationRelay: reply to \(phoneID) failed: \(failure)")
 
         let content = UNMutableNotificationContent()
         content.title = "Reply not sent"
