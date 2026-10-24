@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import UserNotifications
 
 /// Re-posts the phone's message notifications (SMS, WhatsApp, Instagram,
