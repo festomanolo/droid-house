@@ -96,3 +96,23 @@ object ClipDaemon {
             override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
                 if (code == FIRST_CALL_TRANSACTION) {
                     onClipChanged()
+                    return true
+                }
+                return super.onTransact(code, data, reply, flags)
+            }
+        }
+
+        val listener = Class.forName("android.content.IOnPrimaryClipChangedListener\$Stub")
+            .getMethod("asInterface", IBinder::class.java)
+            .invoke(null, callback)
+
+        val add = clipboard.javaClass.methods.first { it.name == "addPrimaryClipChangedListener" }
+        add.invoke(clipboard, *fillArgs(add, listener))
+    }
+
+    private fun onClipChanged() {
+        val text = readClip() ?: return
+        if (text.isEmpty() || text == lastText) return
+        lastText = text
+        post("/api/clipboard/phone", JSONObject().put("text", text).toString())
+    }
